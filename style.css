@@ -274,4 +274,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 .paper .ph-img img{max-width:100%;max-height:68mm;object-fit:contain;display:inline-block}
 .paper .ph-cap{height:8mm;padding:1mm 3mm;font-size:10pt}
 .paper .ph-pno{text-align:center;font-size:9pt;margin-top:4px}
-@media print{.paper.photo{padding:0}.paper .ph-page{break-after:page;break-inside:avoid}.paper .ph-page:last-child{break-after:auto}}
+.paper .ph-page{margin-top:10mm;font-family:var(--ui)}
+@media print{.paper .ph-page{break-before:page;break-inside:avoid;margin-top:0}}

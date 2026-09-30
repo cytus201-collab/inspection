@@ -159,7 +159,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPhotos', 'vPreview'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -174,11 +174,9 @@
     else if (/^(form|preview)$/.test(cur.v) && !recById(p, cur.wid, cur.rid)) cur = { v: 'work', pid: cur.pid, wid: cur.wid };
     else if (cur.v === 'matItem' && !matById(p, cur.mid)) cur = { v: 'materials', pid: cur.pid };
     else if (cur.v === 'matImport' && !pendingImport) cur = { v: 'materials', pid: cur.pid };
-    else if (/^photo/.test(cur.v) && !sheetById(p, cur.sid)) cur = { v: 'project', pid: cur.pid };
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
-      materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint,
-      photos: renderPhotos, photoPrint: renderPhotoPrint
+      materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint
     })[cur.v]();
   }
 
@@ -332,7 +330,6 @@
     }).join('');
     $('workRefs').textContent = w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
       : '抽查標準依據：' + w.sources.map(function (s) { return D.refs[s]; }).join('；') + '。數值請依本案契約圖說確認。';
-    $('photoBlock').innerHTML = photoBlockHtml(p, 'work', w.id);
     show('vWork');
   }
   function countItems(ph) { return ph.groups.reduce(function (a, g) { return a + g.items.length; }, 0); }
@@ -361,6 +358,7 @@
     $('irrPicker').hidden = w.kind !== 'irregular';
     if (single) fillSingle(r); else fixVis();
     if (w.kind === 'irregular') { fillPickWork(); renderRows(); } else renderGroups();
+    $('phMsg').textContent = ''; renderPhotoGrid();
     show('vForm');
     sizePad('sigInspector'); sizePad('sigFixer');
   }
@@ -571,6 +569,7 @@
   $('btnDelRec').addEventListener('click', function () {
     var r = R();
     ask('刪除紀錄 ' + r.docNo + '？', '刪除後無法復原。', '取消', '刪除紀錄', function () {
+      (r.photos || []).forEach(function (x) { IDB.del(x.id).catch(function () {}); });
       var list = recs(proj(cur.pid), cur.wid); list.splice(list.indexOf(r), 1); save();
       history.back();
     });
@@ -605,7 +604,8 @@
     topbar('列印預覽', recTitle(w, r) + ' ' + r.docNo, '返回修改');
     bindOut(r, 'outAt');
     var paper = $('paper'); paper.className = 'paper';
-    paper.innerHTML = w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r);
+    paper.innerHTML = (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + photoPages(w, r);
+    paper.querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
     show('vPreview');
     document.title = (w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : recTitle(w, r)) + '_' + r.docNo;
@@ -742,7 +742,6 @@
     }).join('') || '<div class="empty">此篩選沒有材料。</div>')
       : '<div class="empty">尚未建立材料清單。按「匯入材料管制表」上傳工程會格式的材料設備送審管制總表（PDF、Excel 或 CSV），或按「新增材料」逐筆建立。</div>';
     $('matMsg').textContent = flash; flash = '';
-    $('matPhotoBlock').innerHTML = photoBlockHtml(p, 'mat', 'materials');
     show('vMaterials');
   }
   $('matFilter').addEventListener('change', function (e) { matFilter = e.target.value; renderMaterials(); });
@@ -937,7 +936,7 @@
     document.title = '材料設備送審管制總表_' + (I.name || '');
   }
 
-  /* ========== 抽查照片表（照片存於 IndexedDB，容量較大） ========== */
+  /* ========== 抽查照片：屬於每一張抽查單（照片檔存於 IndexedDB，容量較大） ========== */
   var IDB = (function () {
     var dbp = null;
     function db() {
@@ -970,51 +969,20 @@
       }
     };
   })();
-  function sheets(p) { return p.photos || (p.photos = []); }
-  function sheetById(p, sid) { return p && sheets(p).filter(function (s) { return s.id === sid; })[0]; }
-  function photoBlockHtml(p, scope, wid) {
-    var list = sheets(p).filter(function (s) { return s.scope === scope && s.wid === wid; }).sort(function (a, b) { return b.created - a.created; });
-    return '<section class="phase-block"><div class="pb-head"><span class="pb-title">抽查照片<span class="pb-n"> · 每頁 6 張</span></span>' +
-      '<button type="button" class="btn sm" data-newph="' + scope + '|' + wid + '">＋ 新增照片表</button></div>' +
-      (list.map(function (s) {
-        return '<button type="button" class="rec" data-sid="' + s.id + '"><span class="rb-main"><span class="rb-title">' + esc(s.title) + '</span>' +
-          '<span class="rb-meta">' + esc([s.date && roc(s.date, '.'), s.items.length + ' 張'].join(' · ')) + '</span></span><span class="chev">›</span></button>';
-      }).join('') || '<div class="pb-empty">尚無照片表</div>') + '</section>';
-  }
-  function onPhotoBlock(e) {
-    var p = proj(cur.pid), nb = e.target.closest('[data-newph]');
-    if (nb) {
-      var a = nb.dataset.newph.split('|'), w = WORK[a[1]];
-      var title = a[0] === 'mat' ? '材料進場抽查照片' : w.kind === 'phased' ? w.name + '施工抽查照片' : w.name + '照片';
-      var s = { id: uid(), scope: a[0], wid: a[1], title: title, date: today(), items: [], created: Date.now() };
-      sheets(p).push(s); save(); go({ v: 'photos', pid: p.id, sid: s.id }); return;
-    }
-    var b = e.target.closest('[data-sid]'); if (b) go({ v: 'photos', pid: p.id, sid: b.dataset.sid });
-  }
-  $('photoBlock').addEventListener('click', onPhotoBlock);
-  $('matPhotoBlock').addEventListener('click', onPhotoBlock);
-  function SH() { return sheetById(proj(cur.pid), cur.sid); }
+  function photoTitle(w) { return w.kind === 'matform' ? '材料進場抽查照片' : w.kind === 'phased' ? w.name + '施工抽查照片' : w.name + '照片'; }
   var thumbCache = {};
-  function renderPhotos() {
-    var s = SH();
-    topbar(s.title || '照片表', s.items.length + ' 張照片', '返回');
-    $('phTitle').value = s.title; $('phDate').value = s.date || '';
-    $('phMsg').textContent = '';
-    renderPhotoGrid();
-    show('vPhotos');
-  }
   function renderPhotoGrid() {
-    var s = SH();
-    $('phGrid').innerHTML = s.items.map(function (it, i) {
+    var r = R(); if (!r.photos) r.photos = [];
+    $('phCount').textContent = r.photos.length ? r.photos.length + ' 張・' + Math.ceil(r.photos.length / 6) + ' 頁' : '尚無照片';
+    $('phGrid').innerHTML = r.photos.map(function (it, i) {
       return '<div class="ph-card"><div class="ph-thumb"><img alt="照片 ' + (i + 1) + '" data-img="' + it.id + '"></div>' +
-        '<label class="f"><span>照片說明</span><textarea rows="2" data-cap="' + i + '" placeholder="例：結構植筋孔深測量">' + esc(it.cap) + '</textarea></label>' +
+        '<label class="f"><span>照片說明</span><textarea rows="2" data-cap="' + i + '" placeholder="例：立柱間距量測">' + esc(it.cap) + '</textarea></label>' +
         '<div class="row-tools"><span class="ph-no">第 ' + (i + 1) + ' 張</span>' +
         (i > 0 ? '<button type="button" class="link" data-up="' + i + '">往前</button>' : '') +
-        (i < s.items.length - 1 ? '<button type="button" class="link" data-down="' + i + '">往後</button>' : '') +
+        (i < r.photos.length - 1 ? '<button type="button" class="link" data-down="' + i + '">往後</button>' : '') +
         '<button type="button" class="link" data-rm="' + i + '">刪除</button></div></div>';
-    }).join('') || '<div class="empty">尚未加入照片。按「拍照」或「從相簿加入」，每 6 張排成一頁 A4。</div>';
+    }).join('');
     $('phGrid').querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
-    topbar(s.title || '照片表', s.items.length + ' 張照片', '返回');
   }
   function loadImg(id) { if (thumbCache[id]) return Promise.resolve(thumbCache[id]); return IDB.get(id).then(function (u) { if (u) thumbCache[id] = u; return u; }).catch(function () { return null; }); }
   function compress(file) {
@@ -1031,14 +999,15 @@
     });
   }
   function addPhotos(files) {
-    var s = SH(), list = Array.prototype.slice.call(files || []); if (!list.length) return;
+    var r = R(), list = Array.prototype.slice.call(files || []); if (!list.length) return;
+    if (!r.photos) r.photos = [];
     $('phMsg').textContent = '正在處理 ' + list.length + ' 張照片…';
-    var lastCap = s.items.length ? s.items[s.items.length - 1].cap : '';
+    var lastCap = r.photos.length ? r.photos[r.photos.length - 1].cap : '';
     list.reduce(function (pr, f) {
       return pr.then(function () {
         return compress(f).then(function (data) {
           var id = 'ph_' + uid(); thumbCache[id] = data;
-          return IDB.put(id, data).then(function () { s.items.push({ id: id, cap: lastCap }); });
+          return IDB.put(id, data).then(function () { r.photos.push({ id: id, cap: lastCap }); });
         });
       });
     }, Promise.resolve()).then(function () {
@@ -1047,51 +1016,29 @@
   }
   $('phCam').addEventListener('change', function (e) { addPhotos(e.target.files); e.target.value = ''; });
   $('phPick').addEventListener('change', function (e) { addPhotos(e.target.files); e.target.value = ''; });
-  $('phTitle').addEventListener('input', function () { SH().title = $('phTitle').value; save(); });
-  $('phDate').addEventListener('input', function () { SH().date = $('phDate').value; save(); });
-  $('phGrid').addEventListener('input', function (e) { var i = e.target.dataset.cap; if (i != null) { SH().items[+i].cap = e.target.value; save(); } });
+  $('phGrid').addEventListener('input', function (e) { var i = e.target.dataset.cap; if (i != null) { R().photos[+i].cap = e.target.value; save(); } });
   $('phGrid').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
-    var s = SH(), it = s.items, d = b.dataset, i;
+    var it = R().photos, d = b.dataset, i;
     if (d.up != null) { i = +d.up; it.splice(i - 1, 0, it.splice(i, 1)[0]); }
     else if (d.down != null) { i = +d.down; it.splice(i + 1, 0, it.splice(i, 1)[0]); }
     else if (d.rm != null) { i = +d.rm; var gone = it.splice(i, 1)[0]; IDB.del(gone.id).catch(function () {}); }
     else return;
     save(); renderPhotoGrid();
   });
-  $('btnPhDel').addEventListener('click', function () {
-    var p = proj(cur.pid), s = SH();
-    ask('刪除照片表「' + s.title + '」？', '表內 ' + s.items.length + ' 張照片都會刪除，無法復原。', '取消', '刪除照片表', function () {
-      s.items.forEach(function (x) { IDB.del(x.id).catch(function () {}); });
-      sheets(p).splice(sheets(p).indexOf(s), 1); save(); history.back();
-    });
-  });
-  $('btnPhDone').addEventListener('click', function () {
-    if (!SH().items.length) { $('phMsg').textContent = '請先加入照片。'; return; }
-    go({ v: 'photoPrint', pid: cur.pid, sid: cur.sid });
-  });
-  function renderPhotoPrint() {
-    var s = SH();
-    topbar('列印預覽', s.title, '返回修改');
-    bindOut(s, 'outAt');
-    var pages = [], head = esc(s.title) + ' ' + roc(s.date, '.');
-    for (var i = 0; i < Math.max(1, s.items.length); i += 6) pages.push(s.items.slice(i, i + 6));
-    var paper = $('paper'); paper.className = 'paper photo';
-    paper.innerHTML = pages.map(function (pg, pi) {
-      var rows = '';
-      for (var rI = 0; rI < 3; rI++) {
-        var a = pg[rI * 2], b = pg[rI * 2 + 1];
-        var img = function (x) { return '<td class="ph-img">' + (x ? '<img alt="" data-img="' + x.id + '">' : '') + '</td>'; };
-        var cap = function (x) { return '<td class="ph-cap">' + (x ? esc(x.cap) : '') + '</td>'; };
-        rows += '<tr>' + img(a) + img(b) + '</tr><tr>' + cap(a) + cap(b) + '</tr>';
-      }
-      return '<section class="ph-page"><h3>' + head + '</h3><table class="ph"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>' + rows + '</table>' +
-        '<div class="ph-pno">' + (pi + 1) + '</div>' + (pi === pages.length - 1 ? foot() : '') + '</section>';
-    }).join('');
-    paper.querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
-    $('printHint').textContent = '紙張選 A4 直式、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
-    show('vPreview');
-    document.title = s.title + '_' + roc(s.date, '.');
+  /* 列印：接在抽查表後，每頁 2×3，不足補空格 */
+  function photoPages(w, r) {
+    var items = r.photos || []; if (!items.length) return '';
+    var head = esc(photoTitle(w)) + ' ' + roc(r.checkDate, '.'), out = '';
+    var img = function (x) { return '<td class="ph-img">' + (x ? '<img alt="" data-img="' + x.id + '">' : '') + '</td>'; };
+    var cap = function (x) { return '<td class="ph-cap">' + (x ? esc(x.cap) : '') + '</td>'; };
+    for (var i = 0, pn = 1; i < items.length; i += 6, pn++) {
+      var pg = items.slice(i, i + 6), rows = '';
+      for (var k2 = 0; k2 < 3; k2++) rows += '<tr>' + img(pg[k2 * 2]) + img(pg[k2 * 2 + 1]) + '</tr><tr>' + cap(pg[k2 * 2]) + cap(pg[k2 * 2 + 1]) + '</tr>';
+      out += '<section class="ph-page"><h3>' + head + '</h3><table class="ph"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>' + rows + '</table>' +
+        '<div class="ph-pno">照片 ' + pn + ' / ' + Math.ceil(items.length / 6) + '　' + esc(r.docNo) + '</div></section>';
+    }
+    return out;
   }
 
   /* ---------- 對話框 ---------- */
