@@ -70,6 +70,7 @@
 <!-- ===== 3 工項：紀錄清單 ===== -->
 <main id="vWork" class="view wrap" hidden>
   <div id="phaseBlocks" class="list"></div>
+  <div id="photoBlock"></div>
   <p class="muted" id="workRefs"></p>
 </main>
 
@@ -99,6 +100,11 @@
   </section>
 
   <div id="groups"></div>
+  <div class="tpl-row" id="tplRow">
+    <button type="button" class="link" id="btnTplSave">將本表的抽查標準設為本工程預設</button>
+    <button type="button" class="link" id="btnTplClear">恢復原始預設</button>
+    <p class="muted" id="tplMsg" role="status"></p>
+  </div>
 
   <section class="card" id="phasedFix" aria-labelledby="h-fix">
     <h2 class="h small" id="h-fix">缺失複查</h2>
@@ -190,6 +196,7 @@
 
   <div class="seg" id="matFilter" role="radiogroup" aria-label="篩選"></div>
   <div id="matList" class="list"></div>
+  <div id="matPhotoBlock"></div>
 </main>
 
 <!-- ===== 6 材料明細 ===== -->
@@ -219,6 +226,7 @@
     <label class="f">抽查情形（規格、數量、批號等）<textarea id="m_inspNote" rows="3"></textarea></label>
     <label class="f">備註<textarea id="m_remark" rows="2"></textarea></label>
   </section>
+  <section class="phase-block" id="matRecBlock"></section>
   <div class="btn-row between">
     <button type="button" class="btn danger" id="btnMatDel">刪除此材料</button>
     <button type="button" class="btn primary" id="btnMatDone">完成</button>
@@ -240,6 +248,27 @@
       <button type="button" class="btn primary" id="btnImpGo">匯入</button>
     </div>
   </section>
+</main>
+
+<!-- ===== 照片表 ===== -->
+<main id="vPhotos" class="view wrap" hidden>
+  <section class="card" aria-labelledby="h-ph">
+    <h2 class="h small" id="h-ph">照片表資料</h2>
+    <div class="grid">
+      <label class="f">標題<input id="phTitle"></label>
+      <label class="f">日期<input id="phDate" type="date"></label>
+    </div>
+    <div class="btn-row">
+      <label class="btn primary sm file-btn">拍照<input type="file" id="phCam" accept="image/*" capture="environment"></label>
+      <label class="btn ghost sm file-btn">從相簿加入<input type="file" id="phPick" accept="image/*" multiple></label>
+    </div>
+    <p class="muted" id="phMsg" role="status"></p>
+  </section>
+  <div id="phGrid" class="ph-grid"></div>
+  <div class="btn-row between">
+    <button type="button" class="btn danger" id="btnPhDel">刪除此照片表</button>
+    <button type="button" class="btn primary" id="btnPhDone">產生 A4 照片表</button>
+  </div>
 </main>
 
 <!-- ===== 8 預覽列印 ===== -->

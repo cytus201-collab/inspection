@@ -1,5 +1,5 @@
 // 離線快取：改版時把 VERSION 加一，手機會自動更新
-const VERSION = 'insp-v5';
+const VERSION = 'insp-v7';
 const FILES = ['./', './index.html', './style.css', './app.js', './data.js', './mat-parse.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

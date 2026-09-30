@@ -249,3 +249,29 @@ button,input,select,textarea{font:inherit;color:inherit}
 .toolbar{flex-wrap:wrap;align-items:center}
 .out-at{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:700}
 .out-at input{padding:8px 10px;border:1.5px solid var(--strong);border-radius:6px;font-size:15px;background:var(--bg);color:var(--ink)}
+
+/* ===== v7：可編輯標準、照片表、空白補格 ===== */
+.std-in{width:100%;min-width:0;margin-top:6px;padding:8px 10px;border:1.5px dashed var(--line);border-radius:6px;background:var(--bg);color:var(--ink2);font-size:15px;resize:vertical}
+.std-in:focus{border-style:solid;border-color:var(--strong);outline:none;color:var(--ink)}
+.item .inline-in{font-weight:800}
+.row-tools{display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:flex-end;align-items:center}
+.gfoot{display:grid;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.gfoot .btn{justify-self:start}
+.removed{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.tpl-row{display:grid;gap:4px;justify-items:start}
+#matRecBlock{margin-top:4px}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.ph-card{border:1.5px solid var(--strong);border-radius:8px;padding:10px;display:grid;gap:8px;align-content:start}
+.ph-thumb{aspect-ratio:4/3;max-width:100%;background:var(--panel);border-radius:4px;overflow:hidden;display:grid;place-items:center}
+.ph-thumb img{width:100%;height:100%;object-fit:contain}
+.ph-card textarea{width:100%;min-width:0;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:15px;background:var(--bg);color:var(--ink)}
+.ph-no{margin-right:auto;font-size:13px;color:var(--muted)}
+.paper tr.blank td{height:1.45em}
+.paper.photo{font-family:var(--ui);padding:10mm 10mm}
+.paper .ph-page h3{font-family:var(--ui);font-weight:500;font-size:14pt;margin:0 0 6px}
+.paper table.ph td{border:1px solid #000;padding:0}
+.paper .ph-img{height:72mm;text-align:center;vertical-align:middle;padding:1.5mm;overflow:hidden}
+.paper .ph-img img{max-width:100%;max-height:68mm;object-fit:contain;display:inline-block}
+.paper .ph-cap{height:8mm;padding:1mm 3mm;font-size:10pt}
+.paper .ph-pno{text-align:center;font-size:9pt;margin-top:4px}
+@media print{.paper.photo{padding:0}.paper .ph-page{break-after:page;break-inside:avoid}.paper .ph-page:last-child{break-after:auto}}
