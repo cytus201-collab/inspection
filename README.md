@@ -22,6 +22,7 @@
 - data.js：所有工項與抽查項目。要新增工項或修改標準只改這個檔，改完把 version 加一
 - index.html / style.css / app.js：程式
 - sw.js：離線快取，改版時把 VERSION 加一
+- 改版時也要把 index.html 裡 style.css、data.js、mat-parse.js、app.js 後面的 ?v= 數字加一，避免手機讀到新舊混用的檔案
 - manifest.webmanifest、icon-*.png：加入手機主畫面用
 
 ## 資料保存
