@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>監造抽查紀錄</title>
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar noprint">
+  <div class="topbar-inner">
+    <button type="button" class="back" id="navBack" hidden></button>
+    <div class="tb-title">
+      <h1 id="tbTitle">監造抽查紀錄</h1>
+      <p class="tb-sub" id="tbSub"></p>
+    </div>
+    <div class="tb-right" id="tbRight"></div>
+  </div>
+</header>
+
+<!-- ===== 1 工程清單 ===== -->
+<main id="vProjects" class="view wrap" hidden>
+  <div class="head-row">
+    <h2 class="h">工程清單</h2>
+    <button type="button" class="btn primary sm" id="btnNewProject">＋ 新增工程</button>
+  </div>
+  <div id="projectList" class="list"></div>
+  <section class="card quiet" aria-labelledby="h-backup">
+    <h2 class="h small" id="h-backup">資料備份</h2>
+    <p class="muted">資料只存在這台裝置的瀏覽器裡。換手機或清除瀏覽器資料前，請先匯出備份。</p>
+    <div class="btn-row">
+      <button type="button" class="btn ghost sm" id="btnExport">匯出備份檔</button>
+      <label class="btn ghost sm file-btn">匯入備份檔<input type="file" id="fileImport" accept="application/json,.json"></label>
+    </div>
+    <p class="muted" id="backupMsg" role="status"></p>
+  </section>
+</main>
+
+<!-- ===== 2 工程：兩個目錄 + 基本資料 ===== -->
+<main id="vProject" class="view wrap wide" hidden>
+  <div class="dirs">
+    <section aria-labelledby="h-works">
+      <h2 class="h" id="h-works">工項目錄</h2>
+      <div id="workGrid" class="work-grid"></div>
+    </section>
+    <section aria-labelledby="h-mats">
+      <h2 class="h" id="h-mats">材料抽查管制</h2>
+      <button type="button" class="mat-dir" id="matDir"></button>
+    </section>
+  </div>
+
+  <details class="card info-card" id="infoCard">
+    <summary class="head-row">
+      <span class="h" id="h-info">工程基本資料</span>
+      <span class="tag" id="infoSaved">已自動儲存</span>
+    </summary>
+    <p class="muted">這裡的資料會自動帶入每一張抽查表的表頭與簽名欄。</p>
+    <div class="grid g3" id="infoForm"></div>
+    <div class="btn-row between">
+      <button type="button" class="btn danger sm" id="btnDelProject">刪除此工程</button>
+    </div>
+  </details>
+</main>
+
+<!-- ===== 3 工項：紀錄清單 ===== -->
+<main id="vWork" class="view wrap" hidden>
+  <div id="phaseBlocks" class="list"></div>
+  <p class="muted" id="workRefs"></p>
+</main>
+
+<!-- ===== 4 填寫抽查表 ===== -->
+<main id="vForm" class="view wrap" hidden>
+  <section class="card" aria-labelledby="h-basic">
+    <h2 class="h small" id="h-basic">本表資料</h2>
+    <div class="auto-line" id="autoLine"></div>
+    <div class="grid">
+      <label class="f">編號<input id="docNo"></label>
+      <label class="f">檢查位置<input id="location" placeholder="例：3F 會議室東側"></label>
+      <label class="f">檢查日期<input id="checkDate" type="date"></label>
+    </div>
+  </section>
+
+  <section class="card" id="irrPicker" hidden aria-labelledby="h-pick">
+    <h2 class="h small" id="h-pick">加入抽驗項目</h2>
+    <p class="muted">依承商自主檢查紀錄表隨機抽樣。可從各工項的抽查標準帶入，或自訂項目。</p>
+    <div class="grid">
+      <label class="f">工項<select id="pickWork"></select></label>
+      <label class="f">抽查項目<select id="pickItem"></select></label>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="btn primary sm" id="btnPickAdd">加入此項目</button>
+      <button type="button" class="btn ghost sm" id="btnCustomAdd">＋ 自訂項目</button>
+    </div>
+  </section>
+
+  <div id="groups"></div>
+
+  <section class="card" id="phasedFix" aria-labelledby="h-fix">
+    <h2 class="h small" id="h-fix">缺失複查</h2>
+    <div class="seg" role="radiogroup" aria-labelledby="h-fix">
+      <label class="pill"><input type="radio" name="fix" value="none"><span>無缺失</span></label>
+      <label class="pill"><input type="radio" name="fix" value="done"><span>已完成改善</span></label>
+      <label class="pill"><input type="radio" name="fix" value="track"><span>未完成改善，追蹤中</span></label>
+    </div>
+    <div class="grid" id="fixFields">
+      <label class="f">複查日期<input id="fixDate" type="date"></label>
+      <label class="f">複查人員<input id="fixPerson"></label>
+    </div>
+  </section>
+
+  <section class="card" id="singleResult" hidden aria-labelledby="h-res">
+    <h2 class="h small" id="h-res">抽驗結果與缺失處理</h2>
+    <div class="res-block">
+      <span class="res-lbl">抽驗結果</span>
+      <div class="seg" data-radio="result">
+        <label class="pill"><input type="radio" name="s_result" value="ok"><span>合格</span></label>
+        <label class="pill"><input type="radio" name="s_result" value="ng"><span>不合格</span></label>
+      </div>
+      <p class="muted" id="resultHint"></p>
+    </div>
+    <div class="res-block" id="ngBlock">
+      <span class="res-lbl">不合格執行</span>
+      <div class="seg">
+        <label class="pill"><input type="radio" name="s_exec" value="improve"><span>改善</span></label>
+        <label class="pill"><input type="radio" name="s_exec" value="redo"><span>拆除重作</span></label>
+      </div>
+      <div class="grid"><label class="f">改善期限<input id="s_deadline" type="date"></label></div>
+      <span class="res-lbl">缺失處理方法</span>
+      <div class="seg">
+        <label class="pill"><input type="radio" name="s_method" value="repair"><span>修補改善</span></label>
+        <label class="pill"><input type="radio" name="s_method" value="redo"><span>拆除重作</span></label>
+      </div>
+      <label class="f">處理說明<textarea id="s_methodNote" rows="2"></textarea></label>
+    </div>
+    <div class="res-block">
+      <span class="res-lbl">複驗結果</span>
+      <div class="seg">
+        <label class="pill"><input type="radio" name="s_re" value="ok"><span>合格</span></label>
+        <label class="pill"><input type="radio" name="s_re" value="ng"><span>不合格，列入施工不合管制總表</span></label>
+      </div>
+      <div class="grid"><label class="f">複查時間<input id="s_reTime" type="date"></label></div>
+    </div>
+    <label class="f">備註<textarea id="s_remark" rows="2"></textarea></label>
+  </section>
+
+  <section class="card" aria-labelledby="h-sign">
+    <h2 class="h small" id="h-sign">簽名</h2>
+    <p class="muted">可在此手寫簽名；留白則列印後親簽。</p>
+    <div class="signs">
+      <div class="sign">
+        <div class="sign-head"><span id="sigInspectorLbl">監造人員</span><button type="button" class="link" data-clear="sigInspector">清除</button></div>
+        <canvas id="sigInspector"></canvas>
+      </div>
+      <div class="sign" id="fixSignBox">
+        <div class="sign-head"><span>複查人員</span><button type="button" class="link" data-clear="sigFixer">清除</button></div>
+        <canvas id="sigFixer"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <div class="btn-row between">
+    <button type="button" class="btn danger" id="btnDelRec">刪除此紀錄</button>
+    <button type="button" class="btn primary" id="btnConfirm">確認並產生 A4 表單</button>
+  </div>
+</main>
+
+<!-- ===== 5 材料抽查管制 ===== -->
+<main id="vMaterials" class="view wrap wide" hidden>
+  <section class="card" aria-labelledby="h-matsum">
+    <div class="head-row">
+      <h2 class="h small" id="h-matsum">抽查進度</h2>
+      <span class="tag" id="matCount"></span>
+    </div>
+    <div class="progress-bar" id="matBar" aria-hidden="true"></div>
+    <div class="legend" id="matLegend"></div>
+  </section>
+
+  <div class="btn-row">
+    <label class="btn primary sm file-btn">匯入材料管制表<input type="file" id="matFile" accept=".pdf,.xlsx,.xls,.csv,application/pdf"></label>
+    <button type="button" class="btn ghost sm" id="btnMatNew">＋ 新增材料</button>
+    <button type="button" class="btn ghost sm" id="btnMatPrint">列印管制總表</button>
+    <button type="button" class="btn ghost sm" id="btnMatCsv">匯出 CSV</button>
+  </div>
+  <p class="muted" id="matMsg" role="status"></p>
+
+  <div class="seg" id="matFilter" role="radiogroup" aria-label="篩選"></div>
+  <div id="matList" class="list"></div>
+</main>
+
+<!-- ===== 6 材料明細 ===== -->
+<main id="vMatItem" class="view wrap" hidden>
+  <section class="card" aria-labelledby="h-mbasic">
+    <h2 class="h small" id="h-mbasic">材料資料（依管制總表）</h2>
+    <div class="grid g3" id="matBasic"></div>
+    <div>
+      <span class="res-lbl">送審資料</span>
+      <div class="checks" id="matDocs"></div>
+    </div>
+  </section>
+  <section class="card" aria-labelledby="h-mtrack">
+    <h2 class="h small" id="h-mtrack">送審與進場</h2>
+    <div class="grid g3" id="matTrack"></div>
+  </section>
+  <section class="card" aria-labelledby="h-minsp">
+    <h2 class="h small" id="h-minsp">進場抽查</h2>
+    <div class="grid">
+      <div class="f"><span class="f-head"><label for="m_inspDate">抽查日期</label><button type="button" class="link" id="btnInspToday">填入今天</button></span><input id="m_inspDate" type="date"></div>
+    </div>
+    <div class="bubbles big" role="radiogroup" aria-label="抽查結果">
+      <label class="bubble ok"><input type="radio" name="m_insp" value="ok"><span>○</span><small>合格</small></label>
+      <label class="bubble ng"><input type="radio" name="m_insp" value="ng"><span>╳</span><small>不合格</small></label>
+      <label class="bubble na"><input type="radio" name="m_insp" value=""><span>－</span><small>未抽查</small></label>
+    </div>
+    <label class="f">抽查情形（規格、數量、批號等）<textarea id="m_inspNote" rows="3"></textarea></label>
+    <label class="f">備註<textarea id="m_remark" rows="2"></textarea></label>
+  </section>
+  <div class="btn-row between">
+    <button type="button" class="btn danger" id="btnMatDel">刪除此材料</button>
+    <button type="button" class="btn primary" id="btnMatDone">完成</button>
+  </div>
+</main>
+
+<!-- ===== 7 匯入預覽 ===== -->
+<main id="vMatImport" class="view wrap wide" hidden>
+  <section class="card" aria-labelledby="h-imp">
+    <h2 class="h small" id="h-imp">確認匯入內容</h2>
+    <p class="muted" id="impInfo"></p>
+    <div class="seg">
+      <label class="pill"><input type="radio" name="impMode" value="merge" checked><span>合併：保留已登錄的日期與抽查結果</span></label>
+      <label class="pill"><input type="radio" name="impMode" value="replace"><span>全部取代</span></label>
+    </div>
+    <div class="table-wrap"><table class="imp-table" id="impTable"></table></div>
+    <div class="btn-row between">
+      <button type="button" class="btn ghost" id="btnImpCancel">取消</button>
+      <button type="button" class="btn primary" id="btnImpGo">匯入</button>
+    </div>
+  </section>
+</main>
+
+<!-- ===== 8 預覽列印 ===== -->
+<main id="vPreview" class="view" hidden>
+  <div class="toolbar noprint">
+    <button type="button" class="btn primary" id="btnPrint">列印 / 存成 PDF</button>
+  </div>
+  <p class="muted center noprint" id="printHint">紙張選 A4、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。</p>
+  <div class="paper" id="paper"></div>
+</main>
+
+<!-- ===== 對話框 ===== -->
+<div class="dialog" id="dlg" hidden>
+  <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <h2 id="dlgTitle"></h2>
+    <p id="dlgBody"></p>
+    <div class="btn-row end">
+      <button type="button" class="btn ghost" id="dlgNo"></button>
+      <button type="button" class="btn primary" id="dlgYes"></button>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script src="mat-parse.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
