@@ -532,6 +532,7 @@
   function renderPreview() {
     var p = proj(cur.pid), w = W(), r = R();
     topbar('列印預覽', recTitle(w, r) + ' ' + r.docNo, '返回修改');
+    bindOut(r, 'outAt');
     var paper = $('paper'); paper.className = 'paper';
     paper.innerHTML = w.kind === 'phased' ? paperPhased(p, w, r) : paperSingle(p, w, r);
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
@@ -540,7 +541,21 @@
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
   function sigImg(r, id) { return r.sig[id] ? '<img alt="簽名" src="' + r.sig[id] + '">' : ''; }
-  function foot() { return '<div class="foot"><span>表單版次 ' + esc(D.version) + '</span><span>產出 ' + new Date().toLocaleString('zh-TW', { hour12: false }) + '</span></div>'; }
+  /* 表單產出時間：預設為現在，可在預覽工具列自訂，存在該筆紀錄（或工程的材料總表）上 */
+  function nowLocal() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+  function fmtOut(v) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v || ''); return m ? (+m[1]) + '/' + (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
+  var outTarget = null;   // { obj, key }
+  function outValue() { return (outTarget && outTarget.obj[outTarget.key]) || nowLocal(); }
+  function foot() { return '<div class="foot"><span>表單版次 ' + esc(D.version) + '</span><span class="foot-out">產出 ' + fmtOut(outValue()) + '</span></div>'; }
+  function bindOut(obj, key) { outTarget = { obj: obj, key: key }; $('outAt').value = outValue(); }
+  function setOut(v) {
+    if (!outTarget) return;
+    outTarget.obj[outTarget.key] = v; save();
+    var f = document.querySelector('#paper .foot-out'); if (f) f.textContent = '產出 ' + fmtOut(outValue());
+    $('outAt').value = outValue();
+  }
+  $('outAt').addEventListener('change', function () { if ($('outAt').value) setOut($('outAt').value); });
+  $('btnOutNow').addEventListener('click', function () { setOut(nowLocal()); });
   function box(on) { return on ? '■' : '□'; }
 
   function paperPhased(p, w, r) {
@@ -796,6 +811,7 @@
         '<td class="c">' + d(m.reviewDate) + '<br>' + esc(m.reviewResult) + '</td><td class="c">' + d(m.arrivalDate) + '</td>' +
         '<td class="c">' + d(m.inspDate) + '<br><b>' + ({ ok: '○', ng: '╳' }[m.inspResult] || '') + '</b></td><td>' + esc([m.archiveNo, m.remark].filter(Boolean).join(' ')) + '</td></tr>';
     }).join('');
+    bindOut(p, 'matOutAt');
     var paper = $('paper'); paper.className = 'paper landscape';
     paper.innerHTML = '<h3>材料設備送審管制總表</h3><p class="no">工程名稱：' + esc(I.name) + '</p>' +
       '<table class="mat"><colgroup><col style="width:3.5%"><col style="width:17%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:7%">' +

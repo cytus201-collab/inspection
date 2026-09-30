@@ -245,6 +245,11 @@
 <!-- ===== 8 預覽列印 ===== -->
 <main id="vPreview" class="view" hidden>
   <div class="toolbar noprint">
+    <div class="out-at">
+      <label for="outAt">表單產出時間</label>
+      <input type="datetime-local" id="outAt" step="60">
+      <button type="button" class="link" id="btnOutNow">改為現在</button>
+    </div>
     <button type="button" class="btn primary" id="btnPrint">列印 / 存成 PDF</button>
   </div>
   <p class="muted center noprint" id="printHint">紙張選 A4、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。</p>

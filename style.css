@@ -246,3 +246,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .paper .single .inner td,.paper .single .inner th{padding:1.5px 4px;vertical-align:middle}
 .paper .single .inner .sub td{padding:1px 4px}
 .paper .single .inner{font-size:8.8pt;line-height:1.22}
+.toolbar{flex-wrap:wrap;align-items:center}
+.out-at{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;font-weight:700}
+.out-at input{padding:8px 10px;border:1.5px solid var(--strong);border-radius:6px;font-size:15px;background:var(--bg);color:var(--ink)}
