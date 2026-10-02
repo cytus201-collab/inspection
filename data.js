@@ -1,7 +1,7 @@
 // 表單內容：新增或修改工項、抽查項目只需編輯此檔（改完把 version 加一）
 // matWork：材料進場抽查紀錄表預設項目
 window.FORM_DATA = {
- "version": "IF-2026.10-v11",
+ "version": "IF-2026.10-v12",
  "refs": {
   "C": "公司表單／依契約圖說",
   "P09251": "工程會施工綱要規範 第09251章 輕鋼架隔間牆",
@@ -2186,6 +2186,16 @@ window.FORM_DATA = {
      ]
     }
    ]
+  },
+  {
+   "id": "archsup",
+   "code": "AS",
+   "name": "建築師督導",
+   "kind": "photo",
+   "sources": [
+    "C"
+   ],
+   "phases": []
   }
  ],
  "notes": [

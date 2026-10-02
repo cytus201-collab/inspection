@@ -278,3 +278,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media print{.paper .ph-page{break-before:page;break-inside:avoid;margin-top:0}}
 
 .paper td{white-space:pre-line}
+
+@media print{.paper .ph-page:first-child{break-before:auto}}

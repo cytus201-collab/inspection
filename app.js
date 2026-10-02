@@ -97,6 +97,7 @@
   function k(g, i) { return g + '-' + i; }
   function flowName(i) { return i === 0 ? '施工前' : PH_SHORT[i] + '檢查'; }
   function stats(w, r) {
+    if (w.kind === 'photo') { var n = (r.photos || []).length; return { t: n, d: n, ng: 0 }; }
     var t = 0, d = 0, ng = 0;
     if (w.kind === 'irregular') {
       (r.rows || []).forEach(function (x) { t++; if (x.r) d++; if (x.r === 'ng') ng++; });
@@ -314,7 +315,7 @@
     var p = proj(cur.pid), w = WORK[cur.wid], list = recs(p, w.id);
     topbar(w.name, p.info.name || '未命名工程', p.info.name || '工程');
     var blocks = w.kind === 'phased' ? w.phases.map(function (ph, pi) { return { pi: pi, title: '(' + (pi + 1) + ') ' + flowName(pi), n: countItems(ph) + ' 項' }; })
-      : [{ pi: 0, title: '抽查紀錄', n: w.kind === 'safety' ? countItems(w.phases[0]) + ' 項' : '項目自選' }];
+      : [{ pi: 0, title: w.kind === 'photo' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'safety' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
     $('phaseBlocks').innerHTML = blocks.map(function (b) {
       var items = list.filter(function (r) { return r.phase === b.pi; }).sort(function (a, c) { return c.seq - a.seq; });
       var rows = items.map(function (r) {
@@ -328,7 +329,7 @@
         '<span class="pb-n"> · ' + b.n + '</span></span><button type="button" class="btn sm" data-new="' + b.pi + '">＋ 新增抽查</button></div>' +
         (rows || '<div class="pb-empty">尚無紀錄</div>') + '</section>';
     }).join('');
-    $('workRefs').textContent = w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
+    $('workRefs').textContent = w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
       : '抽查標準依據：' + w.sources.map(function (s) { return D.refs[s]; }).join('；') + '。數值請依本案契約圖說確認。';
     show('vWork');
   }
@@ -349,15 +350,20 @@
     var p = proj(cur.pid), w = W(), r = R(), I = p.info, single = !isFix(w), m = w.kind === 'matform' && matById(p, r.mid);
     topbar(recTitle(w, r), m ? m.name : (I.name || '未命名工程'), m ? '材料' : w.name);
     $('autoLine').innerHTML = '自動帶入：工程名稱「' + esc(I.name || '未填') + '」' + (m ? ' · 材料「' + esc(m.name) + '」' : single ? '' : ' · 分項「' + esc(w.name) + '」') + ' · 監造人員「' + esc(I.inspector || '未填') + '」';
-    $('tplRow').hidden = w.kind === 'irregular'; $('tplMsg').textContent = '';
+    var photoOnly = w.kind === 'photo';
+    $('tplRow').hidden = w.kind === 'irregular' || photoOnly; $('tplMsg').textContent = '';
+    $('signCard').hidden = photoOnly;
     ['docNo', 'location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
     $('fixPerson').placeholder = I.inspector || '';
     document.querySelectorAll('input[name="fix"]').forEach(function (x) { x.checked = x.value === r.fix; });
     $('sigInspectorLbl').textContent = (single ? '監造現場人員' : '監造人員') + (I.inspector ? '（' + I.inspector + '）' : '');
-    $('phasedFix').hidden = single; $('singleResult').hidden = !single;
+    $('phasedFix').hidden = single || photoOnly; $('singleResult').hidden = !single || photoOnly;
     $('irrPicker').hidden = w.kind !== 'irregular';
-    if (single) fillSingle(r); else fixVis();
-    if (w.kind === 'irregular') { fillPickWork(); renderRows(); } else renderGroups();
+    if (photoOnly) { $('groups').innerHTML = ''; $('tbRight').textContent = (r.photos || []).length + ' 張'; }
+    else {
+      if (single) fillSingle(r); else fixVis();
+      if (w.kind === 'irregular') { fillPickWork(); renderRows(); } else renderGroups();
+    }
     $('phMsg').textContent = ''; renderPhotoGrid();
     show('vForm');
     sizePad('sigInspector'); sizePad('sigFixer');
@@ -577,6 +583,10 @@
 
   $('btnConfirm').addEventListener('click', function () {
     var w = W(), r = R(), miss = [];
+    if (w.kind === 'photo') {
+      if (!(r.photos || []).length) { $('phMsg').textContent = '請先加入照片。'; $('phMsg').scrollIntoView({ block: 'center' }); return; }
+      go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return;
+    }
     var toPreview = function () {
       if (!isFix(w) && !r.result) { r.result = stats(w, r).ng ? 'ng' : 'ok'; save(); }
       if (w.kind === 'matform') { var m = matById(proj(cur.pid), r.mid); if (m) { m.inspDate = r.checkDate || today(); m.inspResult = stats(w, r).ng ? 'ng' : 'ok'; save(); } }
@@ -604,7 +614,8 @@
     topbar('列印預覽', recTitle(w, r) + ' ' + r.docNo, '返回修改');
     bindOut(r, 'outAt');
     var paper = $('paper'); paper.className = 'paper';
-    paper.innerHTML = (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + photoPages(w, r);
+    paper.innerHTML = w.kind === 'photo' ? photoPages(w, r).replace(/<\/section>$/, foot() + '</section>')
+      : (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + photoPages(w, r);
     paper.querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
     show('vPreview');
