@@ -281,6 +281,7 @@
       '<span class="md-go">進入材料管制 ›</span>'
       : '<span class="md-lbl">尚未匯入材料設備送審管制總表</span><span class="md-meta">上傳工程會格式的管制總表（PDF、Excel 或 CSV），系統會列出每項材料，追蹤送審、進場與抽查日期。</span><span class="md-go">開始建立 ›</span>';
 
+    renderCal(p);
     $('infoForm').innerHTML = INFO_FIELDS.map(function (f) { return fieldHtml('i_', f, I[f.k]); }).join('');
     $('infoCard').open = !I.name || !!cur.focus;
     $('infoSaved').textContent = saveMsg || '已自動儲存';
@@ -370,6 +371,7 @@
     topbar(recTitle(w, r), m ? m.name : (I.name || '未命名工程'), m ? '材料' : w.name);
     $('autoLine').innerHTML = '自動帶入：工程名稱「' + esc(I.name || '未填') + '」' + (m ? ' · 材料「' + esc(m.name) + '」' : single ? '' : ' · 分項「' + esc(w.name) + '」') + ' · 監造人員「' + esc(I.inspector || '未填') + '」';
     var photoOnly = w.kind === 'photo';
+    $('btnMove').hidden = w.kind === 'matform' || S.projects.length < 2;
     $('tplRow').hidden = w.kind === 'irregular' || photoOnly; $('tplMsg').textContent = '';
     $('signCard').hidden = photoOnly;
     ['docNo', 'location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
@@ -1092,6 +1094,166 @@
     }
     return out;
   }
+
+  /* ========== 移到／複製到其他工程 ========== */
+  $('btnMove').addEventListener('click', function () {
+    var p = proj(cur.pid), w = W(), r = R();
+    $('mvInfo').textContent = '「' + recTitle(w, r) + ' ' + r.docNo + '」會放到所選工程的同一工項、同一階段，編號依該工程重新編排。';
+    $('mvList').innerHTML = S.projects.filter(function (x) { return x !== p; }).map(function (x, i) {
+      return '<label class="pill"><input type="radio" name="mvTo" value="' + x.id + '"' + (i ? '' : ' checked') + '><span>' + esc(x.info.name || '未命名工程') + '</span></label>';
+    }).join('');
+    $('moveDlg').hidden = false;
+  });
+  $('mvCancel').addEventListener('click', function () { $('moveDlg').hidden = true; });
+  $('mvGo').addEventListener('click', function () {
+    var sel = document.querySelector('input[name="mvTo"]:checked'); if (!sel) return;
+    var mode = document.querySelector('input[name="mvMode"]:checked').value;
+    var from = proj(cur.pid), to = proj(sel.value), w = W(), r = R();
+    $('moveDlg').hidden = true;
+    var nr = transfer(from, to, w, r, mode);
+    if (mode === 'move') { go({ v: 'form', pid: to.id, wid: w.id, rid: nr.id }, true); return; }
+    ask('已複製到「' + (to.info.name || '未命名工程') + '」', '新編號 ' + nr.docNo + '，照片也一併複製。', '留在本表', '前往該表', function () {
+      go({ v: 'form', pid: to.id, wid: w.id, rid: nr.id });
+    });
+  });
+  function transfer(from, to, w, r, mode) {
+    var list = recs(to, w.id), nr = mode === 'move' ? r : JSON.parse(JSON.stringify(r));
+    var seq = list.filter(function (x) { return x.phase === r.phase; }).reduce(function (m, x) { return Math.max(m, x.seq); }, 0) + 1;
+    if (mode === 'copy') {
+      nr.id = uid(); nr.created = Date.now();
+      (nr.photos || []).forEach(function (ph) {
+        var old = ph.id; ph.id = 'ph_' + uid();
+        loadImg(old).then(function (d) { if (!d) return; thumbCache[ph.id] = d; IDB.put(ph.id, d); if (window.Cloud) window.Cloud.uploadPhoto(ph.id, d); });
+      });
+    } else {
+      var src = recs(from, w.id); src.splice(src.indexOf(r), 1);
+      (from.plans || []).forEach(function (pl) { if (pl.rid === r.id) delete pl.rid; });
+    }
+    nr.seq = seq;
+    nr.docNo = (to.info.code ? to.info.code + '-' : '') + w.code + (w.kind === 'phased' ? (r.phase + 1) : '') + '-' + ('00' + seq).slice(-3);
+    list.push(nr);
+    if (to.works && to.works.indexOf(w.id) < 0) to.works.push(w.id);
+    save();
+    return nr;
+  }
+
+  /* ========== 工程日曆：已抽查（讀取表單）、預定抽查（可編輯、可拖曳）、材料進場 ========== */
+  var calY, calM, calSel = today();
+  function ymd(d) { var t = new Date(d); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); }
+  function workLabel(w, phase) { return w.kind === 'phased' ? w.name.replace(/工程$/, '') + '（' + ['施工前', '施工中', '完成'][phase] + '）' : w.name; }
+  function calEvents(p) {
+    var ev = [], linked = {};
+    Object.keys(p.recs || {}).forEach(function (wid) {
+      var w = WORK[wid]; if (!w) return;
+      (p.recs[wid] || []).forEach(function (r) {
+        if (!r.checkDate) return;
+        var m = w.kind === 'matform' && matById(p, r.mid);
+        ev.push({ date: r.checkDate, kind: 'rec', label: m ? '材料抽查：' + m.name : workLabel(w, r.phase), sub: [r.docNo, r.location].filter(Boolean).join(' · '), ng: stats(w, r).ng, wid: wid, rid: r.id });
+        linked[r.id] = 1; linked[wid + '|' + (w.kind === 'phased' ? r.phase : 0) + '|' + r.checkDate] = 1;
+      });
+    });
+    (p.mats || []).forEach(function (m) { if (m.arrivalDate) ev.push({ date: m.arrivalDate, kind: 'mat', label: '進場：' + (m.name || '材料'), sub: m.no || '', mid: m.id }); });
+    (p.plans || []).forEach(function (pl) {
+      if ((pl.rid && linked[pl.rid]) || linked[pl.wid + '|' + (pl.phase || 0) + '|' + pl.date]) return;
+      var w = WORK[pl.wid];
+      ev.push({ date: pl.date, kind: 'plan', label: (pl.time ? pl.time + ' ' : '') + (w ? workLabel(w, pl.phase || 0) : '抽查'), sub: pl.note || '', plid: pl.id, overdue: pl.date < today() });
+    });
+    return ev.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.label < b.label ? -1 : 1; });
+  }
+  function renderCal(p) {
+    if (calY == null) { var t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); }
+    $('calTitle').textContent = (calY - 1911) + ' 年 ' + (calM + 1) + ' 月（' + calY + '）';
+    var ev = calEvents(p), byDay = {};
+    ev.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
+    var first = new Date(calY, calM, 1), start = new Date(calY, calM, 1 - first.getDay()), td = today(), cells = '';
+    ['日', '一', '二', '三', '四', '五', '六'].forEach(function (d) { cells += '<div class="cal-wd">' + d + '</div>'; });
+    for (var i = 0; i < 42; i++) {
+      var d = new Date(start); d.setDate(start.getDate() + i);
+      var key = ymd(d), list = byDay[key] || [], other = d.getMonth() !== calM;
+      if (i === 35 && other) break;
+      cells += '<button type="button" class="cal-cell' + (other ? ' other' : '') + (key === td ? ' today' : '') + (key === calSel ? ' sel' : '') + '" data-day="' + key + '" aria-label="' + key + ' ' + list.length + ' 筆">' +
+        '<span class="cal-n">' + d.getDate() + '</span><span class="cal-evs">' +
+        list.slice(0, 3).map(function (e) { return evChip(e, true); }).join('') +
+        (list.length > 3 ? '<span class="cal-more">+' + (list.length - 3) + '</span>' : '') + '</span></button>';
+    }
+    $('calGrid').innerHTML = cells;
+    renderCalDay(p, byDay[calSel] || []);
+  }
+  function evChip(e, small) {
+    var cls = 'ev ev-' + e.kind + (e.ng ? ' ev-ng' : '') + (e.overdue ? ' ev-over' : '');
+    var attr = e.plid ? ' data-plid="' + e.plid + '" draggable="true"' : '';
+    return '<span class="' + cls + '"' + attr + ' title="' + esc(e.label) + '">' + (e.ng ? '╳ ' : e.overdue ? '! ' : '') + esc(e.label) + '</span>';
+  }
+  function renderCalDay(p, list) {
+    var on = enabledWorks(p).filter(function (w) { return w.kind !== 'photo' || true; });
+    var d = calSel.split('-');
+    var rows = list.map(function (e) {
+      if (e.kind === 'plan') {
+        var pl = (p.plans || []).filter(function (x) { return x.id === e.plid; })[0];
+        return '<div class="day-ev plan' + (e.overdue ? ' over' : '') + '"><div class="rb-main"><span class="rb-title">預定：' + esc(e.label) + (e.overdue ? '<span class="badge-ng">已過期</span>' : '') + '</span>' +
+          (e.sub ? '<span class="rb-meta">' + esc(e.sub) + '</span>' : '') + '</div><div class="day-tools">' +
+          '<button type="button" class="btn primary sm" data-start="' + pl.id + '">開始抽查</button>' +
+          '<label class="mini">改日期<input type="date" data-redate="' + pl.id + '" value="' + pl.date + '"></label>' +
+          '<button type="button" class="link" data-delplan="' + pl.id + '">刪除</button></div></div>';
+      }
+      var go2 = e.rid ? ' data-openrec="' + e.wid + '|' + e.rid + '"' : ' data-openmat="' + e.mid + '"';
+      return '<button type="button" class="day-ev ' + e.kind + '"' + go2 + '><span class="rb-main"><span class="rb-title">' + (e.kind === 'rec' ? '已抽查：' : '') + esc(e.label) +
+        (e.ng ? '<span class="badge-ng">' + e.ng + ' 缺失</span>' : '') + '</span><span class="rb-meta">' + esc(e.sub) + '</span></span><span class="chev">›</span></button>';
+    }).join('');
+    var opts = on.map(function (w) { return '<option value="' + w.id + '">' + esc(w.name) + '</option>'; }).join('');
+    $('calDay').innerHTML = '<h3 class="day-h">' + (d[0] - 1911) + ' 年 ' + (+d[1]) + ' 月 ' + (+d[2]) + ' 日' + (calSel === today() ? '（今天）' : '') + '</h3>' +
+      (rows || '<p class="muted">這天沒有抽查紀錄或預定。</p>') +
+      '<div class="plan-form"><span class="res-lbl">新增預定抽查</span><div class="grid g3">' +
+      '<label class="f">工項<select id="plWork">' + opts + '</select></label>' +
+      '<label class="f" id="plPhaseBox">階段<select id="plPhase"><option value="0">施工前</option><option value="1">施工中檢查</option><option value="2">施工完成檢查</option></select></label>' +
+      '<label class="f">時間（選填）<input id="plTime" type="time"></label>' +
+      '<label class="f wide">備註（選填）<input id="plNote" placeholder="例：3F 東側隔間封板前"></label></div>' +
+      '<button type="button" class="btn ghost sm" id="btnAddPlan">＋ 加入 ' + (+d[1]) + '/' + (+d[2]) + ' 的預定</button></div>';
+    var syncPh = function () { var w = WORK[$('plWork').value]; $('plPhaseBox').hidden = !w || w.kind !== 'phased'; };
+    $('plWork').addEventListener('change', syncPh); syncPh();
+  }
+  function plan(p, id) { return (p.plans || []).filter(function (x) { return x.id === id; })[0]; }
+  $('calPrev').addEventListener('click', function () { calM--; if (calM < 0) { calM = 11; calY--; } renderCal(proj(cur.pid)); });
+  $('calNext').addEventListener('click', function () { calM++; if (calM > 11) { calM = 0; calY++; } renderCal(proj(cur.pid)); });
+  $('calToday').addEventListener('click', function () { var t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); calSel = today(); renderCal(proj(cur.pid)); });
+  $('calGrid').addEventListener('click', function (e) {
+    var c = e.target.closest('[data-day]'); if (!c) return;
+    calSel = c.dataset.day; renderCal(proj(cur.pid));
+    if (window.innerWidth < 960) $('calDay').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+  /* 拖曳預定到其他日期（電腦） */
+  $('calGrid').addEventListener('dragstart', function (e) { var c = e.target.closest('[data-plid]'); if (c) e.dataTransfer.setData('text/plain', c.dataset.plid); });
+  $('calGrid').addEventListener('dragover', function (e) { if (e.target.closest('[data-day]')) e.preventDefault(); });
+  $('calGrid').addEventListener('drop', function (e) {
+    var c = e.target.closest('[data-day]'), id = e.dataTransfer.getData('text/plain'); if (!c || !id) return;
+    e.preventDefault(); var p = proj(cur.pid), pl = plan(p, id); if (!pl) return;
+    pl.date = c.dataset.day; calSel = pl.date; save(); renderCal(p);
+  });
+  $('calDay').addEventListener('click', function (e) {
+    var p = proj(cur.pid), b = e.target.closest('button'); if (!b) return;
+    var ds = b.dataset;
+    if (b.id === 'btnAddPlan') {
+      var wid = $('plWork').value, w = WORK[wid];
+      (p.plans || (p.plans = [])).push({ id: uid(), date: calSel, time: $('plTime').value, wid: wid, phase: w && w.kind === 'phased' ? +$('plPhase').value : 0, note: $('plNote').value.trim() });
+      save(); renderCal(p); return;
+    }
+    if (ds.delplan) { p.plans = p.plans.filter(function (x) { return x.id !== ds.delplan; }); save(); renderCal(p); return; }
+    if (ds.start) {
+      var pl = plan(p, ds.start), w2 = WORK[pl.wid];
+      if (!w2) return;
+      var r = newRecord(p, w2, w2.kind === 'phased' ? pl.phase : 0, { checkDate: pl.date, location: pl.note || '' });
+      pl.rid = r.id; save();
+      go({ v: 'form', pid: p.id, wid: w2.id, rid: r.id }); return;
+    }
+    if (ds.openrec) { var a = ds.openrec.split('|'); go({ v: 'form', pid: p.id, wid: a[0], rid: a[1] }); return; }
+    if (ds.openmat) go({ v: 'matItem', pid: p.id, mid: ds.openmat });
+  });
+  $('calDay').addEventListener('change', function (e) {
+    var id = e.target.dataset.redate; if (!id || !e.target.value) return;
+    var p = proj(cur.pid), pl = plan(p, id); pl.date = e.target.value; calSel = pl.date;
+    var d = new Date(pl.date + 'T00:00:00'); calY = d.getFullYear(); calM = d.getMonth();
+    save(); renderCal(p);
+  });
 
   /* ---------- 對話框 ---------- */
   var dlgYesFn = null;

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -43,6 +43,18 @@
 
 <!-- ===== 2 工程：兩個目錄 + 基本資料 ===== -->
 <main id="vProject" class="view wrap wide" hidden>
+  <section class="card cal" id="calCard" aria-labelledby="calTitle">
+    <div class="cal-head">
+      <button type="button" class="btn ghost sm" id="calPrev" aria-label="上個月">‹</button>
+      <h2 class="h small" id="calTitle"></h2>
+      <button type="button" class="btn ghost sm" id="calNext" aria-label="下個月">›</button>
+      <button type="button" class="btn ghost sm" id="calToday">今天</button>
+      <span class="cal-legend"><i class="ev ev-rec"></i>已抽查 <i class="ev ev-plan"></i>預定 <i class="ev ev-mat"></i>材料進場</span>
+    </div>
+    <div class="cal-grid" id="calGrid" role="grid"></div>
+    <div class="cal-day" id="calDay"></div>
+  </section>
+
   <div class="dirs">
     <section aria-labelledby="h-works">
       <h2 class="h" id="h-works">工項目錄</h2>
@@ -189,6 +201,7 @@
 
   <div class="btn-row between">
     <button type="button" class="btn danger" id="btnDelRec">刪除此紀錄</button>
+    <button type="button" class="btn ghost" id="btnMove">移到／複製到其他工程</button>
     <button type="button" class="btn primary" id="btnConfirm">確認並產生 A4 表單</button>
   </div>
 </main>
@@ -283,6 +296,21 @@
 
 <!-- ===== 對話框 ===== -->
 <div class="sync-pill noprint" id="syncPill" hidden role="status"></div>
+<div class="dialog" id="moveDlg" hidden>
+  <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="mvTitle">
+    <h2 id="mvTitle">移到／複製到其他工程</h2>
+    <p class="muted" id="mvInfo"></p>
+    <div class="seg" id="mvMode">
+      <label class="pill"><input type="radio" name="mvMode" value="move" checked><span>移動</span></label>
+      <label class="pill"><input type="radio" name="mvMode" value="copy"><span>複製一份</span></label>
+    </div>
+    <div class="seg mv-list" id="mvList"></div>
+    <div class="btn-row end">
+      <button type="button" class="btn ghost" id="mvCancel">取消</button>
+      <button type="button" class="btn primary" id="mvGo">確定</button>
+    </div>
+  </div>
+</div>
 <div class="dialog" id="dlg" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
     <h2 id="dlgTitle"></h2>
@@ -294,9 +322,9 @@
   </div>
 </div>
 
-<script src="data.js?v=13"></script>
-<script src="mat-parse.js?v=13"></script>
-<script src="cloud.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="data.js?v=14"></script>
+<script src="mat-parse.js?v=14"></script>
+<script src="cloud.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

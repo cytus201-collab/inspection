@@ -292,3 +292,45 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sync-pill.wait{border-style:dashed}
 .sync-pill.err{background:#000;color:#fff}
 .wrap{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+
+/* v14：工程日曆、移到其他工程 */
+.cal{gap:10px}
+.cal-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.cal-head .h{min-width:9em;text-align:center}
+.cal-legend{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:12px;color:var(--muted)}
+.cal-legend .ev{width:22px;height:12px;padding:0;display:inline-block}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1.5px solid var(--strong);border-left:1px solid var(--line)}
+.cal-wd{font-size:12px;font-weight:700;text-align:center;padding:4px 0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel)}
+.cal-cell{min-height:92px;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:stretch;text-align:left;padding:4px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;font:inherit}
+.cal-cell:hover{background:var(--panel)}
+.cal-cell.other{color:var(--muted);background:repeating-linear-gradient(135deg,transparent 0 6px,var(--panel) 6px 7px)}
+.cal-cell.sel{outline:2.5px solid var(--strong);outline-offset:-2.5px}
+.cal-n{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;align-self:flex-start;min-width:22px;height:22px;display:grid;place-items:center;border-radius:999px}
+.cal-cell.today .cal-n{background:var(--strong);color:var(--inv)}
+.cal-evs{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ev{display:block;font-size:11px;line-height:1.35;padding:1px 4px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev-rec{background:var(--strong);color:var(--inv)}
+.ev-rec.ev-ng{background:repeating-linear-gradient(135deg,#000 0 4px,#444 4px 8px);color:#fff;font-weight:700}
+.ev-plan{border:1.5px dashed var(--strong);color:var(--ink);background:var(--bg);cursor:grab}
+.ev-plan.ev-over{border-style:dotted;font-weight:800}
+.ev-mat{border:1.5px solid var(--line);color:var(--ink2);background:var(--panel)}
+.cal-more{font-size:11px;color:var(--muted);font-weight:700}
+.cal-day{display:grid;gap:8px;border-top:1.5px solid var(--strong);padding-top:10px}
+.day-h{font-size:16px;margin:0}
+.day-ev{display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:100%;text-align:left;border:1.5px solid var(--strong);border-radius:8px;padding:10px 12px;background:var(--bg);color:var(--ink);font:inherit;cursor:pointer}
+.day-ev.plan{border-style:dashed;cursor:default}
+.day-ev.mat{border-color:var(--line)}
+.day-tools{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-left:auto}
+.mini{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700}
+.mini input{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:14px;background:var(--bg);color:var(--ink)}
+.plan-form{display:grid;gap:8px;padding:10px;border:1.5px dashed var(--line);border-radius:8px}
+.plan-form .btn{justify-self:start}
+.mv-list{max-height:40vh;overflow:auto}
+@media (max-width:600px){
+  .cal-cell{min-height:58px;padding:2px}
+  .ev{font-size:0;height:6px;padding:0;border-radius:2px}
+  .ev-plan{height:7px}
+  .cal-more{font-size:10px}
+  .cal-legend{margin-left:0}
+}
+@media (min-width:960px){.cal{grid-template-columns:minmax(0,2fr) minmax(0,1fr);grid-template-rows:auto 1fr;align-items:start}.cal-head,.cal-grid{grid-column:1}.cal-day{grid-column:2;grid-row:1/span 2;border-top:0;padding-top:0;border-left:1.5px solid var(--strong);padding-left:14px}}
