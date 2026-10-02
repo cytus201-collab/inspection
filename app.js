@@ -651,7 +651,7 @@
     var body = tableBody(effGroups(w, r), PAD.phased);
     var on = r.fix !== 'none';
     var fixTxt = box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善';
-    return '<h3>' + esc(w.name) + '施工抽查紀錄表(' + (r.phase + 1) + ')</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
+    return '<h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表(' + (r.phase + 1) + ')') + '</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
       headTable(I.name, w.name, r) +
       '<tr><td>施工流程</td><td colspan="3">' + flow + '</td></tr>' +
       '<tr><td>檢查結果</td><td colspan="3"><span class="opt">○檢查合格</span><span class="opt">╳有缺失需改正</span><span class="opt">／無此檢查項目</span></td></tr></table>' +

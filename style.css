@@ -276,3 +276,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 .paper .ph-pno{text-align:center;font-size:9pt;margin-top:4px}
 .paper .ph-page{margin-top:10mm;font-family:var(--ui)}
 @media print{.paper .ph-page{break-before:page;break-inside:avoid;margin-top:0}}
+
+.paper td{white-space:pre-line}
