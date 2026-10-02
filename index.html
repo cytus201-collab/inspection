@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 
@@ -46,6 +46,11 @@
   <div class="dirs">
     <section aria-labelledby="h-works">
       <h2 class="h" id="h-works">工項目錄</h2>
+      <details class="work-pick" id="workPickBox">
+        <summary>選擇本工程要抽查的工項</summary>
+        <div class="checks" id="workPick"></div>
+        <button type="button" class="link" id="btnWorkAll">全部顯示</button>
+      </details>
       <div id="workGrid" class="work-grid"></div>
     </section>
     <section aria-labelledby="h-mats">
@@ -277,6 +282,7 @@
 </main>
 
 <!-- ===== 對話框 ===== -->
+<div class="sync-pill noprint" id="syncPill" hidden role="status"></div>
 <div class="dialog" id="dlg" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
     <h2 id="dlgTitle"></h2>
@@ -288,8 +294,9 @@
   </div>
 </div>
 
-<script src="data.js?v=12"></script>
-<script src="mat-parse.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="data.js?v=13"></script>
+<script src="mat-parse.js?v=13"></script>
+<script src="cloud.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

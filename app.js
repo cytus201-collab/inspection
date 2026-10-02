@@ -68,7 +68,10 @@
   function addDays(d, n) { var t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); }
   function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
   var saveMsg = '';
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); saveMsg = ''; } catch (e) { saveMsg = '裝置空間不足或瀏覽器禁止暫存，請匯出備份'; } }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); saveMsg = ''; } catch (e) { saveMsg = '裝置空間不足或瀏覽器禁止暫存，請匯出備份'; }
+    if (window.Cloud) window.Cloud.changed();
+  }
   function loadScript(src) {
     return new Promise(function (res, rej) {
       var s = document.createElement('script'); s.src = src; s.onload = res;
@@ -246,10 +249,18 @@
   });
 
   /* ========== 2 工程 ========== */
+  /* 本工程要抽查的工項：未設定時為全部；已停用但有紀錄的工項仍顯示，避免資料看不到 */
+  function enabledWorks(p) {
+    return D.works.filter(function (w) { return !p.works || p.works.indexOf(w.id) >= 0 || (p.recs[w.id] || []).length; });
+  }
   function renderProject() {
     var p = proj(cur.pid), I = p.info;
     topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '工程清單');
-    $('workGrid').innerHTML = D.works.map(function (w) {
+    var on = enabledWorks(p);
+    $('workPick').innerHTML = D.works.map(function (w) {
+      return '<label class="chk"><input type="checkbox" data-wsel="' + w.id + '"' + (on.indexOf(w) >= 0 ? ' checked' : '') + '><span>' + esc(w.name) + '</span></label>';
+    }).join('');
+    $('workGrid').innerHTML = on.map(function (w) {
       var list = p.recs[w.id] || [], ng = 0, meta;
       list.forEach(function (r) { if (stats(w, r).ng) ng++; });
       if (w.kind === 'phased') {
@@ -282,6 +293,14 @@
       return c[s] ? '<span class="seg-' + s + '" style="width:' + (c[s] / n * 100).toFixed(2) + '%" title="' + MSTAT[s] + ' ' + c[s] + '"></span>' : '';
     }).join('') + '</span>';
   }
+  $('workPick').addEventListener('change', function (e) {
+    var id = e.target.dataset.wsel; if (!id) return;
+    var p = proj(cur.pid), sel = p.works ? p.works.slice() : D.works.map(function (w) { return w.id; });
+    if (e.target.checked) { if (sel.indexOf(id) < 0) sel.push(id); } else sel = sel.filter(function (x) { return x !== id; });
+    p.works = D.works.map(function (w) { return w.id; }).filter(function (x) { return sel.indexOf(x) >= 0; });
+    save(); var open = $('workPickBox').open; renderProject(); $('workPickBox').open = open;
+  });
+  $('btnWorkAll').addEventListener('click', function () { var p = proj(cur.pid); delete p.works; save(); renderProject(); $('workPickBox').open = true; });
   $('workGrid').addEventListener('click', function (e) {
     var b = e.target.closest('[data-wid]'); if (b) go({ v: 'work', pid: cur.pid, wid: b.dataset.wid });
   });
@@ -402,7 +421,8 @@
     return '<div class="item' + (val === 'ng' ? ' ng' : '') + '" ' + attr + '>' +
       '<div>' + nameHtml + stdHtml + (ref ? '<div class="item-ref">依據：' + esc(ref) + '</div>' : '') + '</div>' +
       '<div class="row"><div class="bubbles" role="radiogroup">' + b + '</div>' +
-      '<div class="note"><textarea id="' + noteId + '" rows="1" placeholder="' + esc(hint || '實際抽查情形') + '" aria-label="實際抽查情形">' + esc(note) + '</textarea></div></div>' +
+      '<div class="note"><textarea id="' + noteId + '" rows="1" placeholder="' + esc(hint || '實際抽查情形') + '" aria-label="實際抽查情形">' + esc(note) + '</textarea>' +
+      '<div class="phrases">' + (D.phrases || []).map(function (f, i) { return '<button type="button" class="chip" data-ph="' + i + '">' + esc(f.t) + '</button>'; }).join('') + '</div></div></div>' +
       (extra || '') + '</div>';
   }
   var plainName = function (s) { return '<div class="item-name">' + s + '</div>'; };
@@ -431,6 +451,20 @@
     } else obj[f] = v;
     save();
   });
+  /* 定型文：填入實際抽查情形，並帶入對應的判定（若尚未判定） */
+  $('groups').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ph]'); if (!b) return;
+    var item = b.closest('.item'), f = D.phrases[+b.dataset.ph], ta = item.querySelector('.note textarea');
+    var cur0 = ta.value.trim(), prev = D.phrases.filter(function (x) { return x.t === cur0; })[0];
+    if (cur0.split('；').indexOf(f.t) >= 0) return;
+    ta.value = !cur0 || (prev && prev.r && f.r) ? f.t : cur0 + '；' + f.t;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    if (f.r && !item.querySelector('input[type=radio]:checked')) {
+      var rd = item.querySelector('input[type=radio][value="' + f.r + '"]');
+      if (rd) { rd.checked = true; rd.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    e.stopPropagation();
+  }, true);
   $('groups').addEventListener('click', function (e) {
     var t = e.target.closest('button'); if (!t) return;
     var r = R(), ds = t.dataset;
@@ -484,7 +518,8 @@
 
   /* 不定期抽查：自選項目 */
   function fillPickWork() {
-    $('pickWork').innerHTML = PHASED.map(function (w) { return '<option value="' + w.id + '">' + esc(w.name) + '</option>'; }).join('');
+    var en = enabledWorks(proj(cur.pid));
+    $('pickWork').innerHTML = PHASED.filter(function (w) { return en.indexOf(w) >= 0; }).map(function (w) { return '<option value="' + w.id + '">' + esc(w.name) + '</option>'; }).join('');
     fillPickItem();
   }
   function fillPickItem() {
@@ -628,7 +663,7 @@
   function fmtOut(v) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v || ''); return m ? (+m[1]) + '/' + (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
   var outTarget = null;   // { obj, key }
   function outValue() { return (outTarget && outTarget.obj[outTarget.key]) || nowLocal(); }
-  function foot() { return '<div class="foot"><span>表單版次 ' + esc(D.version) + '</span><span class="foot-out">產出 ' + fmtOut(outValue()) + '</span></div>'; }
+  function foot() { return '<div class="foot"><span></span><span class="foot-out">產出 ' + fmtOut(outValue()) + '</span></div>'; }
   function bindOut(obj, key) { outTarget = { obj: obj, key: key }; $('outAt').value = outValue(); }
   function setOut(v) {
     if (!outTarget) return;
@@ -995,7 +1030,13 @@
     }).join('');
     $('phGrid').querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
   }
-  function loadImg(id) { if (thumbCache[id]) return Promise.resolve(thumbCache[id]); return IDB.get(id).then(function (u) { if (u) thumbCache[id] = u; return u; }).catch(function () { return null; }); }
+  function loadImg(id) {
+    if (thumbCache[id]) return Promise.resolve(thumbCache[id]);
+    return IDB.get(id).catch(function () { return null; }).then(function (u) {
+      if (u || !window.Cloud) return u;
+      return window.Cloud.getPhoto(id).then(function (d) { if (d) IDB.put(id, d).catch(function () {}); return d; });
+    }).then(function (u) { if (u) thumbCache[id] = u; return u; }).catch(function () { return null; });
+  }
   function compress(file) {
     return new Promise(function (res, rej) {
       var url = URL.createObjectURL(file), img = new Image();
@@ -1018,7 +1059,7 @@
       return pr.then(function () {
         return compress(f).then(function (data) {
           var id = 'ph_' + uid(); thumbCache[id] = data;
-          return IDB.put(id, data).then(function () { r.photos.push({ id: id, cap: lastCap }); });
+          return IDB.put(id, data).then(function () { r.photos.push({ id: id, cap: lastCap }); if (window.Cloud) window.Cloud.uploadPhoto(id, data); });
         });
       });
     }, Promise.resolve()).then(function () {
@@ -1063,9 +1104,15 @@
   $('dlgYes').addEventListener('click', function () { $('dlg').hidden = true; if (dlgYesFn) dlgYesFn(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) $('dlg').hidden = true; });
 
+  window.APP = {
+    state: function () { return S; }, setState: function (x) { S = x; }, D: D, cur: function () { return cur; },
+    persist: function () { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} },
+    rerender: function () { render(); }, ask: ask
+  };
   go({ v: 'projects' }, true);
+  if (window.Cloud) window.Cloud.init();
 
-  if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
+  if (!window.Cloud && 'serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
   }
 })();
