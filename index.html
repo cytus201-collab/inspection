@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=14">
+<link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
 
@@ -93,7 +93,10 @@
 <!-- ===== 4 填寫抽查表 ===== -->
 <main id="vForm" class="view wrap" hidden>
   <section class="card" aria-labelledby="h-basic">
-    <h2 class="h small" id="h-basic">本表資料</h2>
+    <div class="head-row">
+      <h2 class="h small" id="h-basic">本表資料</h2>
+      <button type="button" class="btn ghost sm" id="btnMoveTop">⇄ 移到／複製到其他工程</button>
+    </div>
     <div class="auto-line" id="autoLine"></div>
     <div class="grid">
       <label class="f">編號<input id="docNo"></label>
@@ -288,6 +291,7 @@
       <input type="datetime-local" id="outAt" step="60">
       <button type="button" class="link" id="btnOutNow">改為現在</button>
     </div>
+    <button type="button" class="btn ghost" id="btnMovePv">⇄ 移到／複製到其他工程</button>
     <button type="button" class="btn primary" id="btnPrint">列印 / 存成 PDF</button>
   </div>
   <p class="muted center noprint" id="printHint">紙張選 A4、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。</p>
@@ -322,9 +326,9 @@
   </div>
 </div>
 
-<script src="data.js?v=14"></script>
-<script src="mat-parse.js?v=14"></script>
-<script src="cloud.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="data.js?v=15"></script>
+<script src="mat-parse.js?v=15"></script>
+<script src="cloud.js?v=15"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>

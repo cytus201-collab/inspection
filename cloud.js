@@ -6,6 +6,8 @@
   if (!(window.google && google.script && google.script.run)) return;
   var META_KEY = 'inspect-cloud-meta-v1', PULL_MS = 30000, PUSH_MS = 2000;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
+  if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
+  var swept = false;
   var busy = false, timer = null, lastErr = '', me = '', staleOpen = false, started = false;
 
   function load() { try { return JSON.parse(localStorage.getItem(META_KEY)); } catch (e) { return null; } }
@@ -126,6 +128,7 @@
   function uploadPhoto(id, data) {
     if (meta.photoQ.indexOf(id) < 0) meta.photoQ.push(id); keep();
     return call('putPhoto', id, data).then(function () {
+      meta.up[id] = 1;
       meta.photoQ = meta.photoQ.filter(function (x) { return x !== id; }); keep(); status();
     }).catch(function (e) { lastErr = '照片上傳失敗：' + e.message; status(); });
   }
@@ -142,12 +145,33 @@
     }, Promise.resolve());
   }
   function getPhoto(id) { return call('getPhoto', id).catch(function () { return null; }); }
+  /* 補傳：這台裝置有、但尚未確認上傳的照片（例如匯入備份檔、或先前上傳失敗的） */
+  function idbGet(id) {
+    return new Promise(function (res) {
+      try {
+        var rq = indexedDB.open('inspect-photos', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('img'); };
+        rq.onsuccess = function () { try { var g = rq.result.transaction('img').objectStore('img').get(id); g.onsuccess = function () { res(g.result || null); }; g.onerror = function () { res(null); }; } catch (e) { res(null); } };
+        rq.onerror = function () { res(null); };
+      } catch (e) { res(null); }
+    });
+  }
+  function sweepPhotos() {
+    if (swept) return Promise.resolve(); swept = true;
+    var ids = [];
+    A().state().projects.forEach(function (p) {
+      Object.keys(p.recs || {}).forEach(function (w) { (p.recs[w] || []).forEach(function (r) { (r.photos || []).forEach(function (ph) { if (!meta.up[ph.id]) ids.push(ph.id); }); }); });
+    });
+    return ids.reduce(function (pr, id) {
+      return pr.then(function () { return idbGet(id).then(function (d) { if (d) return uploadPhoto(id, d); }); });
+    }, Promise.resolve());
+  }
 
   /* ---------- 流程 ---------- */
   function cycle() {
     if (busy) return Promise.resolve();
     busy = true; status();
-    return push().then(pull).then(function () { return push(); }).then(retryPhotos).then(function () {
+    return push().then(pull).then(function () { return push(); }).then(retryPhotos).then(sweepPhotos).then(function () {
       lastErr = ''; meta.last = Date.now(); keep();
     }).catch(function (e) {
       lastErr = /permission|權限|You do not have|找不到|not found/i.test(e.message) ? '沒有共用資料的存取權限，請管理者分享「室內裝修抽查表單」資料夾給你' : e.message;
@@ -163,6 +187,7 @@
     var pill = document.getElementById('syncPill'); if (!pill) return;
     var n = started ? pending().length + meta.photoQ.length : 0, t;
     if (lastErr) t = lastErr;
+    else if (meta.photoQ.length) t = '照片上傳中，尚有 ' + meta.photoQ.length + ' 張';
     else if (busy) t = '雲端同步中…';
     else if (staleOpen) t = '同事已更新此表，返回後重新開啟可看到';
     else if (n) t = '待上傳 ' + n + ' 筆';

@@ -233,7 +233,7 @@
         var data = JSON.parse(rd.result);
         if (!data || !Array.isArray(data.projects)) throw 0;
         var imgs = data._images || {}; delete data._images;
-        Object.keys(imgs).forEach(function (kk) { IDB.put(kk, imgs[kk]); });
+        Object.keys(imgs).forEach(function (kk) { IDB.put(kk, imgs[kk]); if (window.Cloud) window.Cloud.uploadPhoto(kk, imgs[kk]); });
         var added = 0, updated = 0;
         data.projects.forEach(function (p) {
           if (!p.mats) p.mats = [];
@@ -371,7 +371,8 @@
     topbar(recTitle(w, r), m ? m.name : (I.name || '未命名工程'), m ? '材料' : w.name);
     $('autoLine').innerHTML = '自動帶入：工程名稱「' + esc(I.name || '未填') + '」' + (m ? ' · 材料「' + esc(m.name) + '」' : single ? '' : ' · 分項「' + esc(w.name) + '」') + ' · 監造人員「' + esc(I.inspector || '未填') + '」';
     var photoOnly = w.kind === 'photo';
-    $('btnMove').hidden = w.kind === 'matform' || S.projects.length < 2;
+    var canMove = w.kind !== 'matform';
+    $('btnMove').hidden = !canMove; $('btnMoveTop').hidden = !canMove;
     $('tplRow').hidden = w.kind === 'irregular' || photoOnly; $('tplMsg').textContent = '';
     $('signCard').hidden = photoOnly;
     ['docNo', 'location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
@@ -650,10 +651,11 @@
     var p = proj(cur.pid), w = W(), r = R();
     topbar('列印預覽', recTitle(w, r) + ' ' + r.docNo, '返回修改');
     bindOut(r, 'outAt');
+    $('btnMovePv').hidden = w.kind === 'matform';
     var paper = $('paper'); paper.className = 'paper';
     paper.innerHTML = w.kind === 'photo' ? photoPages(w, r).replace(/<\/section>$/, foot() + '</section>')
       : (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + photoPages(w, r);
-    paper.querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
+    fillImgs(paper);
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
     show('vPreview');
     document.title = (w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : recTitle(w, r)) + '_' + r.docNo;
@@ -1030,7 +1032,17 @@
         (i < r.photos.length - 1 ? '<button type="button" class="link" data-down="' + i + '">往後</button>' : '') +
         '<button type="button" class="link" data-rm="' + i + '">刪除</button></div></div>';
     }).join('');
-    $('phGrid').querySelectorAll('img[data-img]').forEach(function (img) { loadImg(img.dataset.img).then(function (u) { if (u) img.src = u; }); });
+    fillImgs($('phGrid'));
+  }
+  function fillImgs(root) {
+    root.querySelectorAll('img[data-img]').forEach(function (img) {
+      loadImg(img.dataset.img).then(function (u) {
+        if (u) { img.src = u; return; }
+        var m = document.createElement('span'); m.className = 'ph-miss';
+        m.textContent = window.Cloud ? '這張照片還沒上傳到雲端，請在拍照的那台裝置開啟本系統一次' : '這台裝置沒有這張照片（請用含照片的備份檔匯入，或改用雲端共編版）';
+        img.replaceWith(m);
+      });
+    });
   }
   function loadImg(id) {
     if (thumbCache[id]) return Promise.resolve(thumbCache[id]);
@@ -1096,14 +1108,16 @@
   }
 
   /* ========== 移到／複製到其他工程 ========== */
-  $('btnMove').addEventListener('click', function () {
+  ['btnMove', 'btnMoveTop', 'btnMovePv'].forEach(function (id) { $(id).addEventListener('click', openMove); });
+  function openMove() {
     var p = proj(cur.pid), w = W(), r = R();
+    if (S.projects.length < 2) { ask('還沒有其他工程', '請先在工程清單新增要移入的工程，再回來移動或複製這張表。', '好', '前往工程清單', function () { go({ v: 'projects' }); }); return; }
     $('mvInfo').textContent = '「' + recTitle(w, r) + ' ' + r.docNo + '」會放到所選工程的同一工項、同一階段，編號依該工程重新編排。';
     $('mvList').innerHTML = S.projects.filter(function (x) { return x !== p; }).map(function (x, i) {
       return '<label class="pill"><input type="radio" name="mvTo" value="' + x.id + '"' + (i ? '' : ' checked') + '><span>' + esc(x.info.name || '未命名工程') + '</span></label>';
     }).join('');
     $('moveDlg').hidden = false;
-  });
+  }
   $('mvCancel').addEventListener('click', function () { $('moveDlg').hidden = true; });
   $('mvGo').addEventListener('click', function () {
     var sel = document.querySelector('input[name="mvTo"]:checked'); if (!sel) return;
