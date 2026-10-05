@@ -1198,31 +1198,36 @@
     var attr = e.plid ? ' data-plid="' + e.plid + '" draggable="true"' : '';
     return '<span class="' + cls + '"' + attr + ' title="' + esc(e.label) + '">' + (e.ng ? '╳ ' : e.overdue ? '! ' : '') + esc(e.label) + '</span>';
   }
+  var calOpen = null;   // 展開動作列的預定 id
   function renderCalDay(p, list) {
-    var on = enabledWorks(p).filter(function (w) { return w.kind !== 'photo' || true; });
+    var on = enabledWorks(p);
     var d = calSel.split('-');
+    var tag = { plan: '預定', rec: '已查', mat: '進場' };
     var rows = list.map(function (e) {
+      var title = e.label.replace(/^材料抽查：/, '材料：');
+      var badge = e.ng ? '<span class="dl-ng">' + e.ng + '缺失</span>' : e.overdue ? '<span class="dl-ng">過期</span>' : '';
+      var line = '<span class="dl-tag t-' + e.kind + '">' + tag[e.kind] + '</span>' +
+        '<span class="dl-txt"><b>' + esc(title) + '</b>' + (e.sub ? '<small>' + esc(e.sub) + '</small>' : '') + '</span>' + badge;
       if (e.kind === 'plan') {
-        var pl = (p.plans || []).filter(function (x) { return x.id === e.plid; })[0];
-        return '<div class="day-ev plan' + (e.overdue ? ' over' : '') + '"><div class="rb-main"><span class="rb-title">預定：' + esc(e.label) + (e.overdue ? '<span class="badge-ng">已過期</span>' : '') + '</span>' +
-          (e.sub ? '<span class="rb-meta">' + esc(e.sub) + '</span>' : '') + '</div><div class="day-tools">' +
-          '<button type="button" class="btn primary sm" data-start="' + pl.id + '">開始抽查</button>' +
-          '<label class="mini">改日期<input type="date" data-redate="' + pl.id + '" value="' + pl.date + '"></label>' +
-          '<button type="button" class="link" data-delplan="' + pl.id + '">刪除</button></div></div>';
+        var open = calOpen === e.plid, pl = plan(p, e.plid);
+        return '<li class="dl-item' + (open ? ' open' : '') + '"><button type="button" class="dl-row" data-toggle="' + e.plid + '" aria-expanded="' + open + '">' + line + '<span class="dl-chev">' + (open ? '▴' : '▾') + '</span></button>' +
+          (open ? '<div class="dl-acts"><button type="button" class="btn primary sm" data-start="' + pl.id + '">開始抽查</button>' +
+            '<label class="dl-date">改日期<input type="date" data-redate="' + pl.id + '" value="' + pl.date + '"></label>' +
+            '<button type="button" class="link" data-delplan="' + pl.id + '">刪除</button></div>' : '') + '</li>';
       }
       var go2 = e.rid ? ' data-openrec="' + e.wid + '|' + e.rid + '"' : ' data-openmat="' + e.mid + '"';
-      return '<button type="button" class="day-ev ' + e.kind + '"' + go2 + '><span class="rb-main"><span class="rb-title">' + (e.kind === 'rec' ? '已抽查：' : '') + esc(e.label) +
-        (e.ng ? '<span class="badge-ng">' + e.ng + ' 缺失</span>' : '') + '</span><span class="rb-meta">' + esc(e.sub) + '</span></span><span class="chev">›</span></button>';
+      return '<li class="dl-item"><button type="button" class="dl-row"' + go2 + '>' + line + '<span class="dl-chev">›</span></button></li>';
     }).join('');
     var opts = on.map(function (w) { return '<option value="' + w.id + '">' + esc(w.name) + '</option>'; }).join('');
-    $('calDay').innerHTML = '<h3 class="day-h">' + (d[0] - 1911) + ' 年 ' + (+d[1]) + ' 月 ' + (+d[2]) + ' 日' + (calSel === today() ? '（今天）' : '') + '</h3>' +
-      (rows || '<p class="muted">這天沒有抽查紀錄或預定。</p>') +
-      '<div class="plan-form"><span class="res-lbl">新增預定抽查</span><div class="grid g3">' +
+    $('calDay').innerHTML = '<h3 class="day-h">' + (d[0] - 1911) + ' 年 ' + (+d[1]) + ' 月 ' + (+d[2]) + ' 日' + (calSel === today() ? '（今天）' : '') +
+      '<span class="day-n">' + (list.length ? list.length + ' 筆' : '') + '</span></h3>' +
+      (rows ? '<ul class="day-list">' + rows + '</ul>' : '<p class="muted day-empty">這天沒有抽查紀錄或預定。</p>') +
+      '<details class="plan-add"><summary>＋ 新增 ' + (+d[1]) + '/' + (+d[2]) + ' 預定抽查</summary><div class="plan-form"><div class="grid g3">' +
       '<label class="f">工項<select id="plWork">' + opts + '</select></label>' +
       '<label class="f" id="plPhaseBox">階段<select id="plPhase"><option value="0">施工前</option><option value="1">施工中檢查</option><option value="2">施工完成檢查</option></select></label>' +
       '<label class="f">時間（選填）<input id="plTime" type="time"></label>' +
       '<label class="f wide">備註（選填）<input id="plNote" placeholder="例：3F 東側隔間封板前"></label></div>' +
-      '<button type="button" class="btn ghost sm" id="btnAddPlan">＋ 加入 ' + (+d[1]) + '/' + (+d[2]) + ' 的預定</button></div>';
+      '<button type="button" class="btn primary sm" id="btnAddPlan">加入預定</button></div></details>';
     var syncPh = function () { var w = WORK[$('plWork').value]; $('plPhaseBox').hidden = !w || w.kind !== 'phased'; };
     $('plWork').addEventListener('change', syncPh); syncPh();
   }
@@ -1251,6 +1256,7 @@
       (p.plans || (p.plans = [])).push({ id: uid(), date: calSel, time: $('plTime').value, wid: wid, phase: w && w.kind === 'phased' ? +$('plPhase').value : 0, note: $('plNote').value.trim() });
       save(); renderCal(p); return;
     }
+    if (ds.toggle) { calOpen = calOpen === ds.toggle ? null : ds.toggle; renderCal(p); return; }
     if (ds.delplan) { p.plans = p.plans.filter(function (x) { return x.id !== ds.delplan; }); save(); renderCal(p); return; }
     if (ds.start) {
       var pl = plan(p, ds.start), w2 = WORK[pl.wid];
