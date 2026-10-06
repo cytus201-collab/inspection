@@ -281,13 +281,25 @@
   /* ========== 2 工程 ========== */
   /* 本工程要抽查的工項：未設定時為全部；已停用但有紀錄的工項仍顯示，避免資料看不到 */
   function enabledWorks(p) {
-    return D.works.filter(function (w) { return !p.works || p.works.indexOf(w.id) >= 0 || (p.recs[w.id] || []).length; });
+    return orderedWorks(p).filter(function (w) { return !p.works || p.works.indexOf(w.id) >= 0 || (p.recs[w.id] || []).length; });
+  }
+  /* 工項排列順序：每個工程可自訂（長按拖曳），新加入的工項排在預設位置 */
+  function orderedWorks(p) {
+    if (!p.wOrder || !p.wOrder.length) return D.works.slice();
+    var pos = {}; p.wOrder.forEach(function (id, i) { pos[id] = i; });
+    var base = {}; D.works.forEach(function (w, i) { base[w.id] = i; });
+    var rank = function (w) {
+      if (pos[w.id] != null) return pos[w.id];
+      for (var i = base[w.id] - 1; i >= 0; i--) if (pos[D.works[i].id] != null) return pos[D.works[i].id] + 0.5;   // 未排序的新工項接在原本前一項之後
+      return -0.5;
+    };
+    return D.works.slice().sort(function (a, b) { return rank(a) - rank(b) || base[a.id] - base[b.id]; });
   }
   function renderProject() {
     var p = proj(cur.pid), I = p.info;
     topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '工程清單');
     var on = enabledWorks(p);
-    $('workPick').innerHTML = D.works.map(function (w) {
+    $('workPick').innerHTML = orderedWorks(p).map(function (w) {
       return '<label class="chk"><input type="checkbox" data-wsel="' + w.id + '"' + (on.indexOf(w) >= 0 ? ' checked' : '') + '><span>' + esc(w.name) + '</span></label>';
     }).join('');
     $('workGrid').innerHTML = dwgCard(p) + on.map(function (w) {
@@ -316,7 +328,7 @@
     $('infoCard').open = !I.name || !!cur.focus;
     $('infoSaved').textContent = saveMsg || '已自動儲存';
     show('vProject');
-    if (cur.focus) setTimeout(function () { $('i_name').focus(); }, 50);
+    if (cur.focus) { delete cur.focus; try { history.replaceState(cur, ''); } catch (e) {} setTimeout(function () { $('i_name').focus(); }, 50); }
   }
   function barHtml(c, n) {
     if (!n) return '<span class="progress-bar"></span>';
@@ -331,6 +343,59 @@
     p.works = D.works.map(function (w) { return w.id; }).filter(function (x) { return sel.indexOf(x) >= 0; });
     save(); var open = $('workPickBox').open; renderProject(); $('workPickBox').open = open;
   });
+  $('btnWorkOrder').addEventListener('click', function () { var p = proj(cur.pid), sy = window.scrollY; delete p.wOrder; save(); renderProject(); window.scrollTo(0, sy); $('workPickBox').open = true; });
+  /* 長按工項卡片後拖曳排序（手機、電腦皆可） */
+  (function () {
+    var grid = $('workGrid'), timer = null, st = null, justDragged = false;
+    function cards() { return Array.prototype.slice.call(grid.querySelectorAll('[data-wid]')); }
+    function cancel() { clearTimeout(timer); timer = null; if (st && !st.on) st = null; }
+    grid.addEventListener('pointerdown', function (e) {
+      var c = e.target.closest('[data-wid]'); if (!c || e.button > 0) return;
+      st = { c: c, x: e.clientX, y: e.clientY, id: e.pointerId, on: false };
+      timer = setTimeout(function () { begin(e); }, e.pointerType === 'mouse' ? 350 : 450);
+    });
+    function begin() {
+      if (!st) return; st.on = true;
+      var r = st.c.getBoundingClientRect();
+      st.dx = st.x - r.left; st.dy = st.y - r.top;
+      st.ghost = st.c.cloneNode(true); st.ghost.className += ' drag-ghost'; st.ghost.style.width = r.width + 'px'; st.ghost.style.height = r.height + 'px';
+      document.body.appendChild(st.ghost); place(st.x, st.y);
+      st.c.classList.add('drag-src'); grid.classList.add('sorting');
+      try { grid.setPointerCapture(st.id); } catch (err) {}
+      if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
+    }
+    function place(x, y) { st.ghost.style.left = (x - st.dx) + 'px'; st.ghost.style.top = (y - st.dy) + 'px'; }
+    grid.addEventListener('pointermove', function (e) {
+      if (!st) return;
+      if (!st.on) { if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) > 8) cancel(); return; }
+      e.preventDefault(); place(e.clientX, e.clientY);
+      st.ghost.style.visibility = 'hidden';
+      var el = document.elementFromPoint(e.clientX, e.clientY); st.ghost.style.visibility = '';
+      var t = el && el.closest('#workGrid [data-wid]');
+      if (t && t !== st.c) {
+        var r = t.getBoundingClientRect(), list = cards(), after = list.indexOf(t) > list.indexOf(st.c);
+        var before = (e.clientY < r.top + r.height / 2 && Math.abs(e.clientY - (r.top + r.height / 2)) > r.height / 4) || (Math.abs(e.clientY - (r.top + r.height / 2)) <= r.height / 4 && e.clientX < r.left + r.width / 2);
+        if (before && !after) grid.insertBefore(st.c, t); else if (!before && after) grid.insertBefore(st.c, t.nextSibling);
+      }
+      var vh = window.innerHeight; if (e.clientY < 80) window.scrollBy(0, -12); else if (e.clientY > vh - 60) window.scrollBy(0, 12);
+    });
+    function end() {
+      clearTimeout(timer); timer = null;
+      if (!st) return; var s0 = st; st = null; if (!s0.on) return;
+      s0.ghost.remove(); s0.c.classList.remove('drag-src'); grid.classList.remove('sorting');
+      justDragged = true; setTimeout(function () { justDragged = false; }, 350);
+      var p = proj(cur.pid), shown = cards().map(function (c) { return c.dataset.wid; });
+      var all = orderedWorks(p).map(function (w) { return w.id; }), hidden = all.filter(function (id) { return shown.indexOf(id) < 0; });
+      /* 隱藏的工項維持在原本相鄰位置之後 */
+      var next = shown.slice();
+      hidden.forEach(function (id) { var i = all.indexOf(id), prev = null; for (var k = i - 1; k >= 0; k--) if (next.indexOf(all[k]) >= 0) { prev = all[k]; break; } next.splice(prev ? next.indexOf(prev) + 1 : 0, 0, id); });
+      p.wOrder = next; save(); var sy = window.scrollY; renderProject(); window.scrollTo(0, sy);
+    }
+    grid.addEventListener('pointerup', end); grid.addEventListener('pointercancel', function () { if (st && st.on) end(); else cancel(); });
+    grid.addEventListener('touchmove', function (e) { if (st && st.on) e.preventDefault(); }, { passive: false });
+    grid.addEventListener('contextmenu', function (e) { if (e.target.closest('[data-wid]')) e.preventDefault(); });
+    grid.addEventListener('click', function (e) { if (justDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  })();
   $('btnWorkAll').addEventListener('click', function () { var p = proj(cur.pid); delete p.works; save(); renderProject(); $('workPickBox').open = true; });
   $('workGrid').addEventListener('click', function (e) {
     if (e.target.closest('[data-dwgs]')) { go({ v: 'dwgs', pid: cur.pid }); return; }

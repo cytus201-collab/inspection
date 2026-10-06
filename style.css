@@ -414,3 +414,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dwi-btns{display:flex;gap:8px;flex-wrap:wrap}
 .paper .dw-stkey{display:flex;gap:14px;font-size:8.5pt;margin:0 0 3px}
 .paper .dw-stkey span{display:inline-flex;align-items:center}
+/* v21：工項長按拖曳排序 */
+.work-card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.sort-hint{margin:6px 0 0;font-size:13px}
+.work-grid.sorting .work-card{transition:transform .12s}
+.work-card.drag-src{opacity:.25;border-style:dashed}
+.drag-ghost{position:fixed;z-index:50;pointer-events:none;margin:0;box-shadow:0 10px 28px rgba(0,0,0,.3);transform:scale(1.04) rotate(-1deg);background:var(--bg)}

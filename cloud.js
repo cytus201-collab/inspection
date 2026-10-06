@@ -27,7 +27,7 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ id: p.id, info: p.info, works: p.works || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], matOutAt: p.matOutAt || '', created: p.created });
+      var pj = JSON.stringify({ id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], matOutAt: p.matOutAt || '', created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
@@ -94,7 +94,7 @@
       if (type === 'project') {
         var p = byId[id];
         if (!p) { p = { id: id, info: {}, recs: {}, mats: [], created: d.created }; S.projects.push(p); byId[id] = p; }
-        p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works;
+        p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works; if (d.wOrder) p.wOrder = d.wOrder; else delete p.wOrder;
         if (d.tpl) p.tpl = d.tpl; else delete p.tpl; p.plans = d.plans || []; p.dwgs = d.dwgs || []; p.matOutAt = d.matOutAt || '';
       } else {
         var pp = byId[d.pid]; if (!pp) return;
