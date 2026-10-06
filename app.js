@@ -1422,15 +1422,81 @@
   function colorsHtml(sel, attr) {
     return DW_COLORS.map(function (c, i) { return '<button type="button" class="dw-sw' + (i === sel ? ' on' : '') + '" ' + attr + '="' + i + '" style="--c:' + c + '" aria-label="' + DW_NAMES[i] + '色"></button>'; }).join('');
   }
+  /* 色塊狀態：對應抽查紀錄者依結果自動上色 */
+  var ST_COLOR = { ok: '#2f6fed', ng: '#e5383b', fixed: '#2a9d4b', todo: '#8c8c8c' };
+  var ST_NAME = { ok: '合格', ng: '有缺失', fixed: '已改善', todo: '尚未判定', none: '未對應' };
+  function recState(w, r) {
+    var single = !isFix(w), s = stats(w, r);
+    var ng = single ? (r.result === 'ng' || s.ng > 0) : s.ng > 0;
+    if (ng) return (single ? r.re === 'ok' : r.fix === 'done') ? 'fixed' : 'ng';
+    return s.d || r.result || w.kind === 'photo' ? 'ok' : 'todo';
+  }
+  function markState(p, m) { var li = linkInfo(p, m.rid); return li ? recState(li.w, li.r) : 'none'; }
+  function colorOf(m) { var p = proj(cur.pid), st = m.rid ? markState(p, m) : 'none'; return st === 'none' ? DW_COLORS[m.c || 0] : ST_COLOR[st]; }
+  /* 篩選（從工項目錄進入時）；從抽查單進入時只看本表 */
+  var dwF = { period: null, from: '', to: '', st: [], ph: [], wk: [] }, dwOthers = false, dwFOpen = false, dwInfoId = null, dwEditing = false;
+  function markDate(p, m) { var li = linkInfo(p, m.rid); return li ? li.r.checkDate || '' : m.created ? ymd(m.created) : ''; }
+  function periodFrom(f) {
+    var t = today();
+    if (f.period === 'week') { var d = new Date(t + 'T00:00:00'); return addDays(t, -((d.getDay() + 6) % 7)); }
+    if (f.period === 'month') return t.slice(0, 8) + '01';
+    if (f.period === '3m') return addDays(t, -90);
+    if (f.period === 'custom') return f.from || '';
+    return '';
+  }
+  function passFilter(p, m) {
+    var li = linkInfo(p, m.rid), st = li ? recState(li.w, li.r) : 'none';
+    if (dwF.st.length && dwF.st.indexOf(st) < 0) return false;
+    if (dwF.wk.length && (!li || dwF.wk.indexOf(li.w.id) < 0)) return false;
+    if (dwF.ph.length && (!li || li.w.kind !== 'phased' || dwF.ph.indexOf(String(li.r.phase)) < 0)) return false;
+    if (dwF.period && dwF.period !== 'all') {
+      var d = markDate(p, m), a = periodFrom(dwF), b = dwF.period === 'custom' ? dwF.to : '';
+      if (!d || (a && d < a) || (b && d > b)) return false;
+    }
+    return true;
+  }
+  function filterOn() { return !!(dwF.st.length || dwF.wk.length || dwF.ph.length || (dwF.period && dwF.period !== 'all')); }
+  /* 每個色塊在目前畫面的狀態：show 正常、ghost 淡灰參考、hide 不顯示 */
+  function markVis(p, m) {
+    if (cur.link) return m.rid === cur.link ? 'show' : dwOthers ? 'ghost' : 'hide';
+    return passFilter(p, m) ? 'show' : 'hide';
+  }
+  function filterDesc() {
+    var out = [];
+    if (dwF.period && dwF.period !== 'all') out.push({ week: '本週', month: '本月', '3m': '近 3 個月', custom: (dwF.from ? roc(dwF.from, '.') : '') + '～' + (dwF.to ? roc(dwF.to, '.') : '') }[dwF.period]);
+    if (dwF.st.length) out.push(dwF.st.map(function (x) { return ST_NAME[x]; }).join('、'));
+    if (dwF.ph.length) out.push(dwF.ph.map(function (x) { return PH_SHORT[+x]; }).join('、'));
+    if (dwF.wk.length) out.push(dwF.wk.map(function (x) { return WORK[x] ? WORK[x].name : x; }).join('、'));
+    return out.join('；');
+  }
+  function renderFilter() {
+    var p = proj(cur.pid), g = G(), wk = {};
+    g.marks.forEach(function (m) { var li = linkInfo(p, m.rid); if (li) wk[li.w.id] = li.w.name; });
+    var chip = function (grp, v, label) { var on = dwF[grp].indexOf(v) >= 0; return '<button type="button" class="chip' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-f="' + grp + '" data-v="' + v + '">' + esc(label) + '</button>'; };
+    var per = [['all', '全部'], ['week', '本週'], ['month', '本月'], ['3m', '近 3 個月'], ['custom', '自訂']];
+    $('dwFilter').innerHTML =
+      '<div class="dwf-row"><span class="dwf-l">期間</span>' + per.map(function (x) { return '<button type="button" class="chip' + ((dwF.period || 'all') === x[0] ? ' on' : '') + '" data-per="' + x[0] + '">' + x[1] + '</button>'; }).join('') +
+      (dwF.period === 'custom' ? '<input type="date" id="dwfFrom" value="' + dwF.from + '"> ～ <input type="date" id="dwfTo" value="' + dwF.to + '">' : '') + '</div>' +
+      '<div class="dwf-row"><span class="dwf-l">狀態</span>' + ['ng', 'fixed', 'ok', 'todo', 'none'].map(function (x) { return chip('st', x, ST_NAME[x]); }).join('') + '</div>' +
+      '<div class="dwf-row"><span class="dwf-l">階段</span>' + [0, 1, 2].map(function (x) { return chip('ph', String(x), PH_SHORT[x]); }).join('') + '</div>' +
+      (Object.keys(wk).length ? '<div class="dwf-row"><span class="dwf-l">工項</span>' + Object.keys(wk).map(function (x) { return chip('wk', x, wk[x]); }).join('') + '</div>' : '') +
+      '<div class="dwf-row"><button type="button" class="link" id="dwfClear">清除篩選（全部顯示）</button></div>';
+  }
   function renderDwg() {
     var p = proj(cur.pid), g = G(), li = linkInfo(p, cur.link);
-    if (dwLastDid !== g.id + (cur.link || '')) { dwLastDid = g.id + (cur.link || ''); dwZoom = 1; dwSel = null; dwMode = li ? 'mark' : 'view'; }
+    if (dwLastDid !== g.id + (cur.link || '')) {
+      dwLastDid = g.id + (cur.link || ''); dwZoom = 1; dwSel = null; dwInfoId = null; dwEditing = false; dwMode = li ? 'mark' : 'view'; dwOthers = false;
+      if (dwF.period === null) dwF.period = g.marks.length > 20 ? 'month' : 'all';
+    }
     topbar(g.name, p.info.name || '未命名工程', li ? '返回' : '圖說');
     document.querySelectorAll('input[name="dwMode"]').forEach(function (x) { x.checked = x.value === dwMode; });
     $('dwColors').innerHTML = colorsHtml(dwColor, 'data-dwc');
     $('dwName').value = g.name;
-    $('dwTip').textContent = li ? '在圖上拖曳框出「' + li.long + '」的抽查位置，畫好的色塊會自動對應這張抽查表。' :
-      '切到「畫色塊」，在圖上拖曳框出抽查位置；點色塊可改文字、顏色或對應抽查紀錄，選取後可拖曳移動，右下角可調整大小。';
+    $('dwOthersBox').hidden = !li; $('dwOthers').checked = dwOthers;
+    $('dwFilterBtn').hidden = !!li; $('dwFilter').hidden = !!li || !dwFOpen; $('dwFilterBtn').setAttribute('aria-expanded', String(dwFOpen && !li));
+    if (!li && dwFOpen) renderFilter();
+    $('dwTip').textContent = li ? '在圖上拖曳框出「' + li.long + '」的抽查位置，畫好的色塊會自動對應這張抽查表。勾選「顯示其他紀錄」可淡灰顯示其他抽查單的位置作參考。' :
+      '點色塊可看該抽查單摘要；切到「畫色塊」可新增。對應抽查紀錄的色塊依結果自動上色：藍＝合格、紅＝有缺失、綠＝已改善、灰＝尚未判定。';
     show('vDwg');
     var img = $('dwImg');
     if (img.dataset.id !== g.img) { img.removeAttribute('src'); img.dataset.id = g.img; loadImg(g.img).then(function (u) { if (u && img.dataset.id === g.img) img.src = u; }); }
@@ -1441,20 +1507,27 @@
     $('dwCanvas').style.width = cw + 'px'; $('dwCanvas').style.height = (cw * g.h / g.w) + 'px';
     st.classList.toggle('marking', dwMode === 'mark');
   }
-  function markStyle(m) { return 'left:' + (m.x * 100) + '%;top:' + (m.y * 100) + '%;width:' + (m.w * 100) + '%;height:' + (m.h * 100) + '%;--c:' + DW_COLORS[m.c || 0]; }
+  function markStyle(m, col) { return 'left:' + (m.x * 100) + '%;top:' + (m.y * 100) + '%;width:' + (m.w * 100) + '%;height:' + (m.h * 100) + '%;--c:' + (col || colorOf(m)); }
   function drawMarks() {
-    var p = proj(cur.pid), g = G();
+    var p = proj(cur.pid), g = G(), shown = 0;
     $('dwMarks').innerHTML = g.marks.map(function (m, i) {
-      var t = markText(p, m), mine = cur.link && m.rid === cur.link;
-      return '<div class="dw-mark' + (m.id === dwSel ? ' sel' : '') + (cur.link && !mine ? ' dim' : '') + '" data-mk="' + m.id + '" style="' + markStyle(m) + '">' +
+      var v = markVis(p, m); if (v === 'hide' && m.id !== dwSel) return '';
+      if (v === 'ghost') return '<div class="dw-mark ghost" style="' + markStyle(m, '#9a9a9a') + '"></div>';
+      shown++;
+      var t = markText(p, m);
+      return '<div class="dw-mark' + (m.id === dwSel ? ' sel' : '') + '" data-mk="' + m.id + '" style="' + markStyle(m) + '">' +
         '<span class="dw-tag">' + (i + 1) + (t ? ' ' + esc(t) : '') + '</span>' + (m.id === dwSel ? '<i class="dw-h"></i>' : '') + '</div>';
     }).join('');
-    $('dwCount').textContent = g.marks.length + ' 個';
+    $('dwCount').textContent = (shown < g.marks.length ? '顯示 ' + shown + ' / ' : '') + g.marks.length + ' 個';
+    $('dwFilterN').textContent = filterOn() ? '（' + shown + '/' + g.marks.length + '）' : '';
+    $('dwFilterBtn').classList.toggle('on', filterOn());
     $('dwMarkList').innerHTML = g.marks.map(function (m, i) {
-      var li = linkInfo(p, m.rid);
-      return '<li class="dl-item"><button type="button" class="dl-row" data-pick="' + m.id + '"><span class="dw-dot" style="--c:' + DW_COLORS[m.c || 0] + '">' + (i + 1) + '</span>' +
-        '<span class="dl-txt"><b>' + esc(m.t || (li ? li.short : '未命名色塊')) + '</b><small>' + esc(li ? li.long + (li.r.location ? ' · ' + li.r.location : '') : '未對應抽查紀錄') + '</small></span><span class="dl-chev">›</span></button></li>';
-    }).join('');
+      if (markVis(p, m) !== 'show') return '';
+      var li = linkInfo(p, m.rid), st = li ? recState(li.w, li.r) : 'none';
+      return '<li class="dl-item"><button type="button" class="dl-row" data-pick="' + m.id + '"><span class="dw-dot" style="--c:' + colorOf(m) + '">' + (i + 1) + '</span>' +
+        '<span class="dl-txt"><b>' + esc(m.t || (li ? li.short : '未命名色塊')) + '</b><small>' + esc(li ? li.long + (li.r.checkDate ? ' · ' + roc(li.r.checkDate, '.') : '') + (li.r.location ? ' · ' + li.r.location : '') : '未對應抽查紀錄') + '</small></span>' +
+        (st === 'ng' ? '<span class="dl-ng">缺失</span>' : '') + '<span class="dl-chev">›</span></button></li>';
+    }).join('') || '<li class="dl-item"><span class="dl-row muted">' + (g.marks.length ? '目前條件下沒有色塊。' : '尚無色塊。') + '</span></li>';
   }
   function curMark() { var g = G(); return g && g.marks.filter(function (m) { return m.id === dwSel; })[0]; }
   function recOptions(p, sel) {
@@ -1470,14 +1543,35 @@
     return html;
   }
   function dwPanel() {
-    var m = curMark(), p = proj(cur.pid);
-    $('dwEdit').hidden = !m; if (!m) return;
+    var m = curMark(), p = proj(cur.pid), li = m && linkInfo(p, m.rid);
+    var info = !!(m && li && !dwEditing && m.rid !== cur.link);
+    dwInfo(info ? m : null);
+    $('dwEdit').hidden = !m || info; if (!m || info) return;
+    $('dwEditColors').hidden = !!li; $('dwAutoColor').hidden = !li;
     $('dwLabel').value = m.t || ''; $('dwLabel').placeholder = markText(p, Object.assign({}, m, { t: '' })) || '例：抽查位置、C3 柱';
     $('dwRec').innerHTML = recOptions(p, m.rid || '');
     $('dwEditColors').innerHTML = colorsHtml(m.c || 0, 'data-mkc');
     $('dwOpenRec').hidden = !linkInfo(p, m.rid);
   }
+  function dwInfo(m) {
+    var box = $('dwInfo'); box.hidden = !m; if (!m) return;
+    var p = proj(cur.pid), li = linkInfo(p, m.rid), r = li.r, w = li.w, st = recState(w, r), s = stats(w, r), ph = (r.photos || []).slice(0, 3);
+    box.innerHTML = '<div class="dwi-head"><span class="dw-dot" style="--c:' + ST_COLOR[st] + '">' + (G().marks.indexOf(m) + 1) + '</span><b>' + esc(li.long) + '</b>' +
+      '<button type="button" class="dwi-x" data-dwi="close" aria-label="關閉">✕</button></div>' +
+      '<div class="dwi-meta">' + esc([r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · ') || '尚未填寫日期與位置') + '</div>' +
+      '<div class="dwi-meta"><span class="st-chip" style="--c:' + ST_COLOR[st] + '">' + ST_NAME[st] + '</span>' + (s.t ? ' 已判定 ' + s.d + '/' + s.t + (s.ng ? '，缺失 ' + s.ng + ' 項' : '') : '') + (m.t ? ' · 標示：' + esc(m.t) : '') + '</div>' +
+      (ph.length ? '<div class="dwi-ph">' + ph.map(function (x) { return '<img alt="" data-img="' + x.id + '">'; }).join('') + ((r.photos || []).length > 3 ? '<span>+' + (r.photos.length - 3) + '</span>' : '') + '</div>' : '') +
+      '<div class="dwi-btns"><button type="button" class="btn primary sm" data-dwi="open">開啟抽查單 ›</button><button type="button" class="btn ghost sm" data-dwi="edit">編輯色塊</button></div>';
+    fillImgs(box);
+  }
+  $('dwInfo').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-dwi]'); if (!b) return; var a = b.dataset.dwi, m = curMark();
+    if (a === 'close') selectMark(null);
+    else if (a === 'edit') { dwEditing = true; dwPanel(); $('dwEdit').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    else if (a === 'open' && m) { var x = m.rid.split('|'); go({ v: 'form', pid: cur.pid, wid: x[0], rid: x[1] }); }
+  });
   function selectMark(id, scroll) {
+    if (id !== dwSel) dwEditing = false;
     dwSel = id; drawMarks(); dwPanel();
     if (scroll) { var el = document.querySelector('[data-mk="' + id + '"]'); if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }
   }
@@ -1492,6 +1586,17 @@
   $('dwLabel').addEventListener('input', function () { var m = curMark(); if (m) { m.t = $('dwLabel').value; save(); drawMarks(); } });
   $('dwRec').addEventListener('change', function () { var m = curMark(); if (m) { m.rid = $('dwRec').value; save(); drawMarks(); dwPanel(); } });
   $('dwDone').addEventListener('click', function () { selectMark(null); });
+  $('dwOthers').addEventListener('change', function () { dwOthers = $('dwOthers').checked; drawMarks(); });
+  $('dwFilterBtn').addEventListener('click', function () { dwFOpen = !dwFOpen; $('dwFilter').hidden = !dwFOpen; $('dwFilterBtn').setAttribute('aria-expanded', String(dwFOpen)); if (dwFOpen) renderFilter(); });
+  $('dwFilter').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'dwfClear') dwF = { period: 'all', from: '', to: '', st: [], ph: [], wk: [] };
+    else if (b.dataset.per) dwF.period = b.dataset.per;
+    else if (b.dataset.f) { var a = dwF[b.dataset.f], i = a.indexOf(b.dataset.v); if (i < 0) a.push(b.dataset.v); else a.splice(i, 1); }
+    else return;
+    renderFilter(); drawMarks();
+  });
+  $('dwFilter').addEventListener('change', function (e) { if (e.target.id === 'dwfFrom') dwF.from = e.target.value; if (e.target.id === 'dwfTo') dwF.to = e.target.value; drawMarks(); });
   $('dwDelMark').addEventListener('click', function () { var g = G(); g.marks = g.marks.filter(function (m) { return m.id !== dwSel; }); save(); selectMark(null); });
   $('dwOpenRec').addEventListener('click', function () { var m = curMark(), a = m && m.rid.split('|'); if (a) go({ v: 'form', pid: cur.pid, wid: a[0], rid: a[1] }); });
   $('dwMarkList').addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) selectMark(b.dataset.pick, true); });
@@ -1516,7 +1621,7 @@
     if (e.target.classList.contains('dw-h') && (m = curMark())) drag = { t: 'size', m: m, p0: pt, o: { w: m.w, h: m.h } };
     else if (mk && mk.dataset.mk === dwSel && (m = curMark())) drag = { t: 'move', m: m, p0: pt, o: { x: m.x, y: m.y } };
     else if (mk && dwMode !== 'mark') { selectMark(mk.dataset.mk); return; }
-    else if (dwMode === 'mark') { drag = { t: 'new', p0: pt, el: document.createElement('div') }; drag.el.className = 'dw-mark sel'; drag.el.style.cssText = markStyle({ x: pt.x, y: pt.y, w: 0, h: 0, c: dwColor }); $('dwMarks').appendChild(drag.el); }
+    else if (dwMode === 'mark') { drag = { t: 'new', p0: pt, el: document.createElement('div') }; drag.el.className = 'dw-mark sel'; drag.el.style.cssText = markStyle({ x: pt.x, y: pt.y, w: 0, h: 0, c: dwColor, rid: cur.link || '' }); $('dwMarks').appendChild(drag.el); }
     else { drag = { t: 'tap', p0: pt }; return; }
     e.preventDefault(); $('dwCanvas').setPointerCapture(e.pointerId);
   });
@@ -1524,7 +1629,7 @@
     if (!drag || drag.t === 'tap') return;
     var pt = frac(e), dx = pt.x - drag.p0.x, dy = pt.y - drag.p0.y, m = drag.m, el;
     if (drag.t === 'new') {
-      drag.r = { x: Math.min(pt.x, drag.p0.x), y: Math.min(pt.y, drag.p0.y), w: Math.abs(dx), h: Math.abs(dy), c: dwColor };
+      drag.r = { x: Math.min(pt.x, drag.p0.x), y: Math.min(pt.y, drag.p0.y), w: Math.abs(dx), h: Math.abs(dy), c: dwColor, rid: cur.link || '' };
       drag.el.style.cssText = markStyle(drag.r); return;
     }
     if (drag.t === 'move') { m.x = Math.max(0, Math.min(1 - m.w, drag.o.x + dx)); m.y = Math.max(0, Math.min(1 - m.h, drag.o.y + dy)); }
@@ -1538,8 +1643,8 @@
     if (d.t === 'new') {
       var g = G(), r = d.r;
       if (!r || (r.w < 0.006 && r.h < 0.006)) { d.el.remove(); return; }
-      var nm = { id: uid(), x: r.x, y: r.y, w: Math.max(r.w, 0.006), h: Math.max(r.h, 0.006), c: dwColor, t: '', rid: cur.link || '' };
-      g.marks.push(nm); save(); selectMark(nm.id); return;
+      var nm = { id: uid(), x: r.x, y: r.y, w: Math.max(r.w, 0.006), h: Math.max(r.h, 0.006), c: dwColor, t: '', rid: cur.link || '', created: Date.now() };
+      g.marks.push(nm); save(); dwSel = nm.id; dwEditing = true; drawMarks(); dwPanel(); return;
     }
     if (d.moved) save();
   }
@@ -1582,22 +1687,26 @@
     return '<div class="dw-fig" style="width:' + fw.toFixed(1) + 'mm;height:' + fh.toFixed(1) + 'mm"><img alt="" data-img="' + g.img + '">' +
       marks.map(function (m) { return '<div class="dw-mark" style="' + markStyle(m) + '"><span class="dw-tag">' + numOf(m) + '</span></div>'; }).join('') + '</div>';
   }
+  function stKey() {
+    return '<p class="dw-stkey">' + ['ok', 'ng', 'fixed', 'todo'].map(function (k) { return '<span><i class="dw-key" style="--c:' + ST_COLOR[k] + '"></i>' + ST_NAME[k] + '</span>'; }).join('') + '</p>';
+  }
   function dwLegend(p, marks, numOf) {
     return '<table class="dw-legend"><colgroup><col style="width:9%"><col style="width:33%"><col style="width:58%"></colgroup><thead><tr><th>編號</th><th>標示</th><th>對應抽查紀錄</th></tr></thead><tbody>' +
       marks.map(function (m) {
         var li = linkInfo(p, m.rid);
-        return '<tr><td class="c"><i class="dw-key" style="--c:' + DW_COLORS[m.c || 0] + '"></i>' + numOf(m) + '</td><td>' + esc(m.t || '') + '</td><td>' +
-          (li ? esc(li.long) + esc(li.r.location ? '，' + li.r.location : '') + esc(li.r.checkDate ? '，' + roc(li.r.checkDate, '.') : '') : '') + '</td></tr>';
+        return '<tr><td class="c"><i class="dw-key" style="--c:' + colorOf(m) + '"></i>' + numOf(m) + '</td><td>' + esc(m.t || '') + '</td><td>' +
+          (li ? esc(li.long) + '（' + ST_NAME[recState(li.w, li.r)] + '）' + esc(li.r.location ? '，' + li.r.location : '') + esc(li.r.checkDate ? '，' + roc(li.r.checkDate, '.') : '') : '') + '</td></tr>';
       }).join('') + '</tbody></table>';
   }
   function renderDwgPrint() {
     var p = proj(cur.pid), g = G(), land = g.w > g.h, num = function (m) { return g.marks.indexOf(m) + 1; };
+    var ms = g.marks.filter(function (m) { return passFilter(p, m); }), fd = filterDesc();
     topbar('列印預覽', g.name, '圖說');
     bindOut(g, 'outAt'); $('btnMovePv').hidden = true;
     var paper = $('paper'); paper.className = 'paper dw-paper' + (land ? ' landscape' : '');
-    var rows = Math.min(g.marks.length, 30);
-    paper.innerHTML = '<h3 class="dw-h3">抽查位置圖</h3><p class="no">工程名稱：' + esc(p.info.name) + '　圖說：' + esc(g.name) + '</p>' +
-      dwFigure(g, g.marks, land, 22 + (rows ? 8 + rows * 5.2 : 0), num) + (g.marks.length ? dwLegend(p, g.marks, num) : '') + foot();
+    var rows = Math.min(ms.length, 30);
+    paper.innerHTML = '<h3 class="dw-h3">抽查位置圖</h3><p class="no">工程名稱：' + esc(p.info.name) + '　圖說：' + esc(g.name) + (fd ? '　篩選：' + esc(fd) : '') + '</p>' +
+      dwFigure(g, ms, land, 26 + (rows ? 8 + rows * 5.2 : 0), num) + stKey() + (ms.length ? dwLegend(p, ms, num) : '') + foot();
     fillImgs(paper);
     $('printHint').textContent = '紙張選 A4 ' + (land ? '橫向' : '直式') + '、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。';
     show('vPreview');

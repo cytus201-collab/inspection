@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=19">
+<link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
 
@@ -320,12 +320,15 @@
       <label class="pill"><input type="radio" name="dwMode" value="mark"><span>▭ 畫色塊</span></label>
     </div>
     <div class="dw-colors" id="dwColors"></div>
+    <label class="chk dw-others" id="dwOthersBox"><input type="checkbox" id="dwOthers"><span>顯示其他紀錄</span></label>
+    <button type="button" class="btn ghost sm dw-fbtn" id="dwFilterBtn" aria-expanded="false">篩選<span id="dwFilterN"></span></button>
     <div class="dw-zoom">
       <button type="button" class="btn ghost sm" id="dwZoomOut" aria-label="縮小">－</button>
       <button type="button" class="btn ghost sm" id="dwZoomFit">符合</button>
       <button type="button" class="btn ghost sm" id="dwZoomIn" aria-label="放大">＋</button>
     </div>
   </div>
+  <div class="dw-filter noprint" id="dwFilter" hidden></div>
   <div class="dw-stage" id="dwStage"><div class="dw-canvas" id="dwCanvas"><img id="dwImg" alt="圖說"><div id="dwMarks"></div></div></div>
   <div class="wrap dw-under">
     <section class="card" id="dwEdit" hidden>
@@ -335,6 +338,7 @@
         <label class="f">對應抽查紀錄<select id="dwRec"></select></label>
       </div>
       <div class="dw-colors" id="dwEditColors"></div>
+      <p class="muted" id="dwAutoColor" hidden>已對應抽查紀錄，顏色依結果自動顯示：藍＝合格、紅＝有缺失、綠＝已改善、灰＝尚未判定。</p>
       <div class="btn-row between">
         <button type="button" class="btn danger sm" id="dwDelMark">刪除色塊</button>
         <button type="button" class="btn ghost sm" id="dwOpenRec">開啟對應紀錄 ›</button>
@@ -345,6 +349,7 @@
       <ul class="day-list" id="dwMarkList"></ul>
       <p class="muted" id="dwTip">切到「畫色塊」，在圖上拖曳框出抽查位置；點色塊可改文字、顏色或對應抽查紀錄，拖曳可移動，右下角可調整大小。</p>
     </section>
+    <div class="dw-info" id="dwInfo" hidden></div>
     <section class="card quiet">
       <div class="grid">
         <label class="f">圖說名稱<input id="dwName"></label>
@@ -388,9 +393,9 @@
   </div>
 </div>
 
-<script src="data.js?v=19"></script>
-<script src="mat-parse.js?v=19"></script>
-<script src="cloud.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="data.js?v=20"></script>
+<script src="mat-parse.js?v=20"></script>
+<script src="cloud.js?v=20"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
