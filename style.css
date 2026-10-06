@@ -351,3 +351,44 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 .ph-miss{display:grid;place-items:center;height:100%;padding:8px;font-size:12px;color:var(--muted);text-align:center;border:1.5px dashed var(--line)}
 .paper .ph-miss{font-size:9pt;color:#555}
+
+/* ===== v19：未存檔提示、圖說與抽查位置 ===== */
+.draft-note{margin-top:6px;padding:6px 10px;border:1.5px dashed var(--strong);border-radius:6px;font-size:13px;font-weight:700;color:var(--ink)}
+.pin-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px}
+.dwg-card .wc-code{color:var(--ink)}
+.dwg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.dwg-item{display:grid;gap:0;text-align:left;cursor:pointer;background:var(--bg);border:1.5px solid var(--strong);border-radius:8px;padding:0;overflow:hidden;font:inherit;color:var(--ink)}
+.dwg-thumb{display:block;aspect-ratio:4/3;background:var(--panel);border-bottom:1px solid var(--line)}
+.dwg-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.dwg-meta{display:grid;gap:2px;padding:10px 12px}
+.dwg-meta small{color:var(--muted);font-size:13px}
+.dwg-view{padding-bottom:40px}
+.dw-bar{position:sticky;top:56px;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 16px;background:var(--bg);border-bottom:1.5px solid var(--strong)}
+.dw-mode{display:flex;gap:6px}
+.dw-colors{display:flex;gap:8px;align-items:center}
+.dw-sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--bg);outline:1.5px solid var(--line);background:var(--c);cursor:pointer;padding:0}
+.dw-sw.on{outline:3px solid var(--strong)}
+.dw-zoom{display:flex;gap:4px;margin-left:auto}
+.dw-zoom .btn{padding:6px 12px}
+.dw-stage{height:62vh;height:62dvh;overflow:auto;background:#e9e9e9;border-bottom:1.5px solid var(--strong);-webkit-overflow-scrolling:touch}
+.dw-canvas{position:relative;margin:0 auto;background:#fff;touch-action:pan-x pan-y pinch-zoom;user-select:none;-webkit-user-select:none}
+.dw-stage.marking .dw-canvas{touch-action:none;cursor:crosshair}
+.dw-canvas img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;-webkit-user-drag:none}
+.dw-mark{position:absolute;background:color-mix(in srgb,var(--c) 32%,transparent);border:2px solid var(--c);border-radius:2px;cursor:pointer;box-sizing:border-box}
+.dw-mark.sel{outline:2px dashed #000;outline-offset:2px;touch-action:none;cursor:move}
+.dw-mark.dim{opacity:.35}
+.dw-tag{position:absolute;left:-2px;bottom:100%;margin-bottom:2px;background:var(--c);color:#fff;font:700 11px/1.2 var(--ui);padding:2px 5px;border-radius:3px;white-space:nowrap;pointer-events:none}
+.dw-h{position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;background:#fff;border:2px solid #000;border-radius:50%;cursor:nwse-resize;touch-action:none}
+.dw-under{padding-top:16px}
+.dw-dot{flex:none;display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:4px;background:var(--c);color:#fff;font-size:12px;font-weight:800;padding:0 4px}
+/* 列印 */
+.paper .dw-h3{text-align:center}
+.paper .dw-fig{position:relative;margin:4px auto 6px;border:1px solid #000}
+.paper .dw-fig img{position:absolute;inset:0;width:100%;height:100%;display:block}
+.paper .dw-fig .dw-mark{cursor:default;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-width:1.5px}
+.paper .dw-fig .dw-tag{font-size:8pt;padding:0 3px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.paper .dw-legend{width:100%;border-collapse:collapse;font-size:9pt}
+.paper .dw-legend th,.paper .dw-legend td{border:1px solid #000;padding:2px 5px;text-align:left}
+.paper .dw-legend td.c{text-align:center;white-space:nowrap}
+.dw-key{display:inline-block;width:10px;height:10px;margin-right:4px;background:color-mix(in srgb,var(--c) 40%,transparent);border:1.5px solid var(--c);vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{.paper.dw-paper .dw-fig{break-inside:avoid}}

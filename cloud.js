@@ -27,10 +27,11 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ id: p.id, info: p.info, works: p.works || null, tpl: p.tpl || null, plans: p.plans || [], matOutAt: p.matOutAt || '', created: p.created });
+      var pj = JSON.stringify({ id: p.id, info: p.info, works: p.works || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], matOutAt: p.matOutAt || '', created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
+          if (r.draft) return;   // 未確認存檔的新表不同步
           var w = W[wid] || { name: wid, kind: '' }, ng = countNg(r);
           out['record:' + r.id] = {
             json: JSON.stringify({ pid: p.id, wid: wid, rec: r }),
@@ -94,7 +95,7 @@
         var p = byId[id];
         if (!p) { p = { id: id, info: {}, recs: {}, mats: [], created: d.created }; S.projects.push(p); byId[id] = p; }
         p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works;
-        if (d.tpl) p.tpl = d.tpl; else delete p.tpl; p.plans = d.plans || []; p.matOutAt = d.matOutAt || '';
+        if (d.tpl) p.tpl = d.tpl; else delete p.tpl; p.plans = d.plans || []; p.dwgs = d.dwgs || []; p.matOutAt = d.matOutAt || '';
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
@@ -116,7 +117,7 @@
       meta.since = Math.max(0, res.now - 10000); keep();
       if (changed.length) {
         A().persist();
-        var c = A().cur(), editing = /^(form|matItem|preview|matImport)$/.test(c.v);
+        var c = A().cur(), editing = /^(form|matItem|preview|matImport|dwg)$/.test(c.v);
         var mine = editing && changed.some(function (k) { return k === 'record:' + c.rid || k === 'material:' + c.mid; });
         if (!editing) A().rerender(); else if (mine) staleOpen = true;
       }
@@ -161,6 +162,7 @@
     var ids = [];
     A().state().projects.forEach(function (p) {
       Object.keys(p.recs || {}).forEach(function (w) { (p.recs[w] || []).forEach(function (r) { (r.photos || []).forEach(function (ph) { if (!meta.up[ph.id]) ids.push(ph.id); }); }); });
+      (p.dwgs || []).forEach(function (g) { if (g.img && !meta.up[g.img]) ids.push(g.img); });
     });
     return ids.reduce(function (pr, id) {
       return pr.then(function () { return idbGet(id).then(function (d) { if (d) return uploadPhoto(id, d); }); });
