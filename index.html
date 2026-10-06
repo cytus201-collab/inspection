@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 
@@ -295,8 +295,10 @@
       <button type="button" class="link" id="btnOutNow">改為現在</button>
     </div>
     <button type="button" class="btn ghost" id="btnMovePv">⇄ 移到／複製到其他工程</button>
-    <button type="button" class="btn primary" id="btnPrint">列印 / 存成 PDF</button>
+    <button type="button" class="btn ghost" id="btnPrint">🖨 列印</button>
+    <button type="button" class="btn primary" id="btnPdf">⬇ 另存 PDF</button>
   </div>
+  <div class="pdf-row noprint"><label for="pdfName">檔名</label><input id="pdfName"><span>.pdf</span><span class="muted" id="pdfMsg" role="status"></span></div>
   <p class="muted center noprint" id="printHint">紙張選 A4、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。</p>
   <div class="paper" id="paper"></div>
 </main>
@@ -360,7 +362,7 @@
         <button type="button" class="btn danger sm" id="dwDel">刪除此圖說</button>
         <div class="btn-row">
           <button type="button" class="btn ghost sm" id="dwRotate">↻ 旋轉 90°</button>
-          <button type="button" class="btn primary sm" id="dwPrint">列印 / 存成 PDF</button>
+          <button type="button" class="btn primary sm" id="dwPrint">列印 ／ 另存 PDF</button>
         </div>
       </div>
     </section>
@@ -395,9 +397,9 @@
   </div>
 </div>
 
-<script src="data.js?v=21"></script>
-<script src="mat-parse.js?v=21"></script>
-<script src="cloud.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="data.js?v=22"></script>
+<script src="mat-parse.js?v=22"></script>
+<script src="cloud.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

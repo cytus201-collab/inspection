@@ -374,7 +374,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dw-canvas{position:relative;margin:0 auto;background:#fff;touch-action:pan-x pan-y pinch-zoom;user-select:none;-webkit-user-select:none}
 .dw-stage.marking .dw-canvas{touch-action:none;cursor:crosshair}
 .dw-canvas img{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;-webkit-user-drag:none}
-.dw-mark{position:absolute;background:color-mix(in srgb,var(--c) 32%,transparent);border:2px solid var(--c);border-radius:2px;cursor:pointer;box-sizing:border-box}
+.dw-mark{position:absolute;background:var(--bg);border:2px solid var(--c);border-radius:2px;cursor:pointer;box-sizing:border-box}
 .dw-mark.sel{outline:2px dashed #000;outline-offset:2px;touch-action:none;cursor:move}
 .dw-mark.dim{opacity:.35}
 .dw-tag{position:absolute;left:-2px;bottom:100%;margin-bottom:2px;background:var(--c);color:#fff;font:700 11px/1.2 var(--ui);padding:2px 5px;border-radius:3px;white-space:nowrap;pointer-events:none}
@@ -390,7 +390,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .paper .dw-legend{width:100%;border-collapse:collapse;font-size:9pt}
 .paper .dw-legend th,.paper .dw-legend td{border:1px solid #000;padding:2px 5px;text-align:left}
 .paper .dw-legend td.c{text-align:center;white-space:nowrap}
-.dw-key{display:inline-block;width:10px;height:10px;margin-right:4px;background:color-mix(in srgb,var(--c) 40%,transparent);border:1.5px solid var(--c);vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.dw-key{display:inline-block;width:10px;height:10px;margin-right:4px;background:var(--bg);border:1.5px solid var(--c);vertical-align:-1px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{.paper.dw-paper .dw-fig{break-inside:avoid}}
 /* v20：圖說篩選、只看本表、狀態色、色塊摘要卡 */
 .dw-others{font-size:14px}
@@ -420,3 +420,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .work-grid.sorting .work-card{transition:transform .12s}
 .work-card.drag-src{opacity:.25;border-style:dashed}
 .drag-ghost{position:fixed;z-index:50;pointer-events:none;margin:0;box-shadow:0 10px 28px rgba(0,0,0,.3);transform:scale(1.04) rotate(-1deg);background:var(--bg)}
+/* v22：直接另存 PDF */
+.pdf-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;max-width:210mm;margin:8px auto 0;padding:0 16px;font-size:14px;font-weight:700}
+.pdf-row input{flex:1 1 220px;min-width:0;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;font-size:15px;background:var(--bg);color:var(--ink)}
+.pdf-row .muted{flex-basis:100%;font-weight:400}
+.pdf-host{position:fixed;left:-10000px;top:0;z-index:-1;pointer-events:none}
+.pdf-host .pdf-page{max-width:none;margin:0;border:0;box-sizing:border-box;overflow:visible;background:#fff}
