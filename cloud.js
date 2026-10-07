@@ -7,7 +7,7 @@
   'use strict';
   if (!(window.google && google.script && google.script.run)) return;
   var META_KEY = 'inspect-cloud-meta-v1', PULL_MS = 30000, PUSH_MS = 2000;
-  var SCHEMA = 5;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
+  var SCHEMA = 6;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
   var outdated = false;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
   if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
