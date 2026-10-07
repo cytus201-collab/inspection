@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 
@@ -315,6 +315,16 @@
     <p class="muted" id="dwgMsg" role="status"></p>
     <div id="dwgList" class="dwg-list"></div>
   </section>
+  <details class="card quiet" id="dwgRestore">
+    <summary class="h small">還原先前的圖說與色塊</summary>
+    <p class="muted">從試算表「版本記錄」取回舊資料後貼在這裡（或選擇還原檔）。只會把<strong>目前沒有的</strong>圖說與色塊加回來，今天新增或修改的內容不會被覆蓋或刪除。</p>
+    <label class="f">貼上舊資料<textarea id="rsText" rows="4" placeholder='貼上 _sync 分頁中「project:…」那一列的內容（可整列複製）'></textarea></label>
+    <div class="btn-row">
+      <button type="button" class="btn primary sm" id="rsGo">檢查並還原</button>
+      <label class="btn ghost sm file-btn">選擇還原檔（.json）<input type="file" id="rsFile" accept=".json,application/json,text/plain"></label>
+    </div>
+    <p class="muted" id="rsMsg" role="status"></p>
+  </details>
   <section class="card quiet" id="dwgOrphans" hidden>
     <h2 class="h small">找回圖說</h2>
     <p class="muted" id="dwgOrphanMsg"></p>
@@ -403,9 +413,9 @@
   </div>
 </div>
 
-<script src="data.js?v=23"></script>
-<script src="mat-parse.js?v=23"></script>
-<script src="cloud.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="data.js?v=24"></script>
+<script src="mat-parse.js?v=24"></script>
+<script src="cloud.js?v=24"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>

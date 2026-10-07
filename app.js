@@ -1487,6 +1487,40 @@
       fillImgs($('dwgOrphanList'));
     }).catch(function () {});
   }
+  /* 還原圖說：只加回目前沒有的圖說與色塊，不覆蓋、不刪除現有資料 */
+  function parseRestore(text) {
+    var out = [], clean = String(text || '').replace(/\t/g, '');   // 整列複製時欄位以 Tab 分隔，JSON 內不含真正的 Tab
+    try { var j = JSON.parse(clean.trim()); if (j && j.restoreDwgs) return j.restoreDwgs; if (j && j.dwgs) return [{ pid: j.id, dwgs: j.dwgs }]; } catch (e) {}
+    clean.split(/\r?\n/).forEach(function (line) {
+      var i = line.indexOf('{"'); if (i < 0) return;
+      var body = line.slice(i), k = body.lastIndexOf('}');
+      try { var d = JSON.parse(body.slice(0, k + 1)); if (d && d.id && d.dwgs) out.push({ pid: d.id, dwgs: d.dwgs }); } catch (e) {}
+    });
+    return out;
+  }
+  function doRestore(text) {
+    var list = parseRestore(text), addG = 0, addM = 0, miss = 0, seen = 0;
+    if (!list.length) { $('rsMsg').textContent = '沒有讀到圖說資料。請確認貼上的是 _sync 分頁中「project:」開頭那一列的內容。'; return; }
+    list.forEach(function (x) {
+      var p = proj(x.pid); if (!p) { miss++; return; }
+      var cur0 = dwgs(p), byId = {}; cur0.forEach(function (g) { byId[g.id] = g; });
+      (x.dwgs || []).forEach(function (g) {
+        seen++;
+        var have = byId[g.id];
+        if (!have) { cur0.push(JSON.parse(JSON.stringify(g))); addG++; addM += (g.marks || []).length; return; }
+        var mk = {}; have.marks.forEach(function (m) { mk[m.id] = 1; });
+        (g.marks || []).forEach(function (m) { if (!mk[m.id]) { have.marks.push(JSON.parse(JSON.stringify(m))); addM++; } });
+      });
+    });
+    if (addG || addM) save();
+    $('rsMsg').textContent = '讀到 ' + seen + ' 張圖說：加回 ' + addG + ' 張圖說、' + addM + ' 個色塊' + (miss ? '；有 ' + miss + ' 個工程在本系統中已不存在，略過' : '') + (addG || addM ? '。' : '（目前都已存在，不需還原）。');
+    if (addG || addM) { renderDwgs(); $('dwgRestore').open = true; }
+  }
+  $('rsGo').addEventListener('click', function () { doRestore($('rsText').value); });
+  $('rsFile').addEventListener('change', function (e) {
+    var f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    var rd = new FileReader(); rd.onload = function () { doRestore(rd.result); }; rd.readAsText(f);
+  });
   $('btnOrphanAdd').addEventListener('click', function () {
     var p = proj(cur.pid), ids = Array.prototype.slice.call(document.querySelectorAll('#dwgOrphanList input:checked')).map(function (x) { return x.value; });
     if (!ids.length) return;
