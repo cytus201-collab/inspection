@@ -5,7 +5,7 @@
   'use strict';
   if (!(window.google && google.script && google.script.run)) return;
   var META_KEY = 'inspect-cloud-meta-v1', PULL_MS = 30000, PUSH_MS = 2000;
-  var SCHEMA = 4;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
+  var SCHEMA = 5;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
   var outdated = false;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
   if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
@@ -107,6 +107,7 @@
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
+          if (A().fixRec) A().fixRec(d.wid, d.rec);   // 舊格式紀錄轉為固定代碼
           var list = pp.recs[d.wid] || (pp.recs[d.wid] = []), k = list.findIndex(function (r) { return r.id === id; });
           if (k >= 0) list[k] = d.rec; else list.push(d.rec);
         } else if (type === 'material') {
@@ -124,6 +125,7 @@
       var changed = apply(res.items || []);
       meta.since = Math.max(0, res.now - 10000); keep();
       if (changed.length) {
+        if (A().migrate) A().migrate();
         A().persist();
         var c = A().cur(), editing = /^(form|matItem|preview|matImport|dwg)$/.test(c.v);
         var mine = editing && changed.some(function (k) { return k === 'record:' + c.rid || k === 'material:' + c.mid; });
