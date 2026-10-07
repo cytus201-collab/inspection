@@ -211,12 +211,17 @@
   function init() {
     started = true;
     window.addEventListener('popstate', function () { if (staleOpen) { staleOpen = false; setTimeout(function () { A().rerender(); status(); }, 0); } });
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) cycle(); });
+    /* 切換分頁、鎖螢幕或關閉前立刻上傳（無痕視窗關閉後本機資料會清空） */
+    document.addEventListener('visibilitychange', function () { clearTimeout(timer); cycle(); });
+    window.addEventListener('pagehide', function () { clearTimeout(timer); cycle(); });
     setInterval(function () { if (!document.hidden) cycle(); }, PULL_MS);
     var card = document.getElementById('h-backup');
     if (card) card.textContent = '備份檔（手動，雲端版通常不需要）';
+    var note = document.getElementById('backupNote');
+    if (note) note.textContent = '共編版的資料正本存在雲端試算表與雲端硬碟，本機只是暫存副本。使用無痕視窗時，關閉視窗前請確認右下角顯示「已儲存到雲端」。';
     cycle();
   }
 
-  window.Cloud = { init: init, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); } };
+  window.Cloud = { init: init, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
+    unsynced: function () { return started && !outdated ? pending().length + meta.photoQ.length : 0; } };
 })();

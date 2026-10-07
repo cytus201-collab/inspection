@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
 
@@ -32,12 +32,13 @@
   <div id="projectList" class="list"></div>
   <section class="card quiet" aria-labelledby="h-backup">
     <h2 class="h small" id="h-backup">資料備份</h2>
-    <p class="muted">資料只存在這台裝置的瀏覽器裡。換手機或清除瀏覽器資料前，請先匯出備份。</p>
+    <p class="muted" id="backupNote">資料只存在這台裝置的瀏覽器裡。換手機或清除瀏覽器資料前，請先匯出備份。</p>
     <div class="btn-row">
       <button type="button" class="btn ghost sm" id="btnExport">匯出備份檔</button>
       <label class="btn ghost sm file-btn">匯入備份檔<input type="file" id="fileImport" accept="application/json,.json"></label>
     </div>
     <p class="muted" id="backupMsg" role="status"></p>
+    <p class="muted" id="storeInfo"></p>
   </section>
   <details class="trash" id="trashBoxP" hidden>
     <summary>🗑 最近刪除 <span class="tr-n"></span></summary>
@@ -425,9 +426,9 @@
   </div>
 </div>
 
-<script src="data.js?v=26"></script>
-<script src="mat-parse.js?v=26"></script>
-<script src="cloud.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="data.js?v=27"></script>
+<script src="mat-parse.js?v=27"></script>
+<script src="cloud.js?v=27"></script>
+<script src="app.js?v=27"></script>
 </body>
 </html>

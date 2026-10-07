@@ -70,10 +70,24 @@
   function addDays(d, n) { var t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); }
   function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }
   var saveMsg = '';
+  /* 本機儲存：主要存在 IndexedDB（沒有 5MB 上限）；資料不大時另存一份到 localStorage 當備援 */
+  var LS_MAX = 1500000, saveTimer = null, idbOK = !!window.indexedDB, stateSize = 0;
+  function writeLocal() {
+    clearTimeout(saveTimer); saveTimer = null;
+    S.savedAt = Date.now();
+    var txt = JSON.stringify(S); stateSize = txt.length;
+    var lsOK = false;
+    try { if (txt.length < LS_MAX) { localStorage.setItem(KEY, txt); lsOK = true; } else localStorage.removeItem(KEY); } catch (e) {}
+    if (idbOK) IDB.put('state:v1', txt).then(function () { saveMsg = ''; }, function () { idbOK = false; if (!lsOK) saveMsg = '裝置空間不足或瀏覽器禁止暫存，請匯出備份'; });
+    else saveMsg = lsOK ? '' : '裝置空間不足或瀏覽器禁止暫存，請匯出備份';
+  }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(S)); saveMsg = ''; } catch (e) { saveMsg = '裝置空間不足或瀏覽器禁止暫存，請匯出備份'; }
+    clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 250);
     if (window.Cloud) window.Cloud.changed();
   }
+  function flushLocal() { if (saveTimer) writeLocal(); }
+  window.addEventListener('pagehide', flushLocal);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) flushLocal(); });
   function loadScript(src) {
     return new Promise(function (res, rej) {
       var s = document.createElement('script'); s.src = src; s.onload = res;
@@ -274,6 +288,7 @@
     $('projectList').innerHTML = html || '<div class="empty">還沒有工程。按「新增工程」建立第一個，填入基本資料後即可開始抽查。</div>';
     $('backupMsg').textContent = saveMsg;
     renderTrash('trashBoxP', S.trash); $('trashMsgP').textContent = '';
+    storeInfo();
     show('vProjects');
   }
   $('projectList').addEventListener('click', function (e) {
@@ -1974,6 +1989,14 @@
     $('pinInfo').textContent = ls.length ? '已標記 ' + ls.length + ' 處，列印時附上抽查位置圖' : dwgs(p).length ? '' : '尚未匯入圖說';
   }
 
+  function storeInfo() {
+    var mb = function (n) { return (n / 1048576).toFixed(n < 1048576 ? 2 : 1) + ' MB'; };
+    var base = '本機資料 ' + mb(stateSize || JSON.stringify(S).length) + (idbOK ? '（存於 IndexedDB，沒有 5 MB 上限）' : '（瀏覽器不支援 IndexedDB，上限約 5 MB）');
+    $('storeInfo').textContent = base;
+    if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(function (e) {
+      $('storeInfo').textContent = base + '；連同照片與圖說共用 ' + mb(e.usage || 0) + (e.quota ? '／可用 ' + mb(e.quota) : '');
+    }).catch(function () {});
+  }
   /* ========== 最近刪除（回收桶）：保留 7 天，到期自動永久刪除 ========== */
   var TRASH_DAYS = 7, DAY = 86400000;
   function toTrash(p, type, data, extra) {
@@ -2065,20 +2088,35 @@
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) $('dlg').hidden = true; });
 
   /* 抽查項目改用固定代碼：第一次開啟時自動轉換舊資料，轉換前先在本機另存一份備份 */
-  (function () {
+  function migrateBoot() {
     var need = S.projects.some(function (p) { return Object.keys(p.recs || {}).some(function (wid) { return (p.recs[wid] || []).some(function (r) { return hasStd(WORK[wid]) && r.kv !== 2; }); }); });
-    if (!need) { if (migrateAll()) { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} } return; }
+    if (!need) { if (migrateAll()) writeLocal(); return; }
     try { IDB.put('bak_kv2_' + Date.now(), JSON.stringify(S)).catch(function () {}); } catch (e) {}
-    migrateAll(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
-  })();
+    migrateAll(); writeLocal();
+  }
   window.APP = {
     state: function () { return S; }, setState: function (x) { S = x; }, D: D, cur: function () { return cur; },
-    persist: function () { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} },
+    persist: function () { writeLocal(); },
     rerender: function () { render(); }, ask: ask,
     fixRec: function (wid, r) { return migrateRec(WORK[wid], r); }, migrate: migrateAll
   };
-  go({ v: 'projects' }, true);
-  if (window.Cloud) window.Cloud.init();
+  /* 啟動：讀取 IndexedDB 中較新的資料後再開始 */
+  function boot() {
+    S.projects.forEach(function (p) { if (!p.mats) p.mats = []; });
+    migrateBoot();
+    go({ v: 'projects' }, true);
+    if (window.Cloud) window.Cloud.init();
+  }
+  (idbOK ? IDB.get('state:v1').then(function (txt) {
+    if (!txt) return;
+    var st = JSON.parse(txt);
+    if (st && Array.isArray(st.projects) && (st.savedAt || 0) >= (S.savedAt || 0)) S = st;
+  }).catch(function () {}) : Promise.resolve()).then(boot, boot);
+  window.addEventListener('beforeunload', function (e) {
+    flushLocal();
+    var n = window.Cloud && window.Cloud.unsynced ? window.Cloud.unsynced() : 0;
+    if (n) { e.preventDefault(); e.returnValue = '還有 ' + n + ' 筆資料尚未上傳到雲端'; return e.returnValue; }
+  });
 
   if (!window.Cloud && 'serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(function () {});
