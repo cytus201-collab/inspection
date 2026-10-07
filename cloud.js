@@ -1,6 +1,8 @@
 /* Google Apps Script 共編版同步模組
    只在 Apps Script 網頁應用程式內啟用（google.script.run 存在時），GitHub 版不受影響。
-   資料以「工程、抽查紀錄、材料」為單位存入共用試算表；同一筆資料以最後儲存者為準。 */
+   資料以「工程、抽查紀錄、材料」為單位存入共用試算表；同一筆資料以最後儲存者為準。
+   只上傳「使用者在本機實際修改過」的資料（dirty），程式改版造成的格式差異不會被當成修改而上傳，
+   避免久未開啟的裝置用舊資料覆蓋雲端。每次開啟都會完整下載一次，讓本機副本與雲端一致。 */
 (function () {
   'use strict';
   if (!(window.google && google.script && google.script.run)) return;
@@ -9,6 +11,9 @@
   var outdated = false;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
   if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
+  if (!meta.dirty) meta.dirty = {};   // 本機修改過、尚未上傳的資料
+  if (!meta.seen) meta.seen = {};     // 上次觀察到的本機資料雜湊（用來判斷使用者修改了哪些）
+  var fullDone = false;
   var swept = false;
   var busy = false, timer = null, lastErr = '', me = '', staleOpen = false, started = false;
 
@@ -53,11 +58,24 @@
     (r.rows || []).forEach(function (x) { if (x.r === 'ng') n++; });
     return n;
   }
+  /* 比對本機資料與上次觀察的結果：mark 為 true 時，變動的項目標記為「待上傳」 */
+  function observe(mark, snap) {
+    snap = snap || snapshot();
+    if (mark) {
+      Object.keys(snap).forEach(function (k) { if (meta.seen[k] !== snap[k].h) meta.dirty[k] = 1; });
+      Object.keys(meta.seen).forEach(function (k) { if (!snap[k]) meta.dirty[k] = 1; });
+    }
+    var seen = {}; Object.keys(snap).forEach(function (k) { seen[k] = snap[k].h; }); meta.seen = seen;
+    keep(); return snap;
+  }
   function pending(snap) {
     snap = snap || snapshot();
     var ops = [];
-    Object.keys(snap).forEach(function (k) { if (meta.hash[k] !== snap[k].h) ops.push({ key: k, json: snap[k].json, sum: snap[k].sum || null, h: snap[k].h }); });
-    Object.keys(meta.hash).forEach(function (k) { if (!snap[k]) ops.push({ key: k, del: true }); });
+    Object.keys(meta.dirty).forEach(function (k) {
+      if (snap[k]) { if (meta.hash[k] !== snap[k].h) ops.push({ key: k, json: snap[k].json, sum: snap[k].sum || null, h: snap[k].h }); else delete meta.dirty[k]; }
+      else if (meta.hash[k]) ops.push({ key: k, del: true });
+      else delete meta.dirty[k];
+    });
     var rank = function (o) { return o.del ? (o.key.indexOf('project:') === 0 ? 3 : 2) : (o.key.indexOf('project:') === 0 ? 0 : 1); };
     return ops.sort(function (a, b) { return rank(a) - rank(b); });
   }
@@ -69,20 +87,21 @@
     if (!ops.length) return Promise.resolve(0);
     var batch = ops.slice(0, 20);
     return call('push', batch.map(function (o) { return { key: o.key, json: o.json || '', sum: o.sum || null, del: !!o.del }; })).then(function () {
-      batch.forEach(function (o) { if (o.del) delete meta.hash[o.key]; else meta.hash[o.key] = o.h; });
+      batch.forEach(function (o) { if (o.del) delete meta.hash[o.key]; else meta.hash[o.key] = o.h; delete meta.dirty[o.key]; });
       keep();
       return ops.length > 20 ? push() : ops.length;
     });
   }
 
   /* ---------- 下載同事的修改 ---------- */
-  function apply(items) {
-    var S = A().state(), snap = snapshot(), changed = [];
+  function apply(items, full) {
+    var S = A().state(), snap = snapshot(), changed = [], onServer = {};
     var byId = {}; S.projects.forEach(function (p) { byId[p.id] = p; });
     var rank = function (x) { return x.del ? 2 : x.key.indexOf('project:') === 0 ? 0 : 1; };
     items.sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (x) {
       var local = snap[x.key];
-      if (local && meta.hash[x.key] !== local.h) return;          // 本機有尚未上傳的修改，以本機為準
+      if (!x.del) onServer[x.key] = 1;
+      if (meta.dirty[x.key]) return;                                // 本機有尚未上傳的修改，以本機為準
       if (!x.del && local && local.json === x.json) { meta.hash[x.key] = local.h; return; }
       var i = x.key.indexOf(':'), type = x.key.slice(0, i), id = x.key.slice(i + 1), d;
       if (x.del) {
@@ -100,9 +119,9 @@
         if (!p) { p = { id: id, info: {}, recs: {}, mats: [], created: d.created }; S.projects.push(p); byId[id] = p; }
         p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works; if ('wOrder' in d) { if (d.wOrder) p.wOrder = d.wOrder; else delete p.wOrder; }
         if (d.tpl) p.tpl = d.tpl; else delete p.tpl;
-        /* 舊版畫面上傳的資料沒有這些欄位時保留本機內容，稍後會再上傳補回 */
-        if ('plans' in d) p.plans = d.plans || [];
-        if ('dwgs' in d) p.dwgs = d.dwgs || [];
+        /* 舊版畫面上傳的資料沒有這些欄位時保留本機內容，並標記稍後上傳補回 */
+        if ('plans' in d) p.plans = d.plans || []; else if ((p.plans || []).length) meta.dirty[x.key] = 1;
+        if ('dwgs' in d) p.dwgs = d.dwgs || []; else if ((p.dwgs || []).length) meta.dirty[x.key] = 1;
         if ('trash' in d) p.trash = d.trash || []; p.matOutAt = d.matOutAt || '';
       } else {
         var pp = byId[d.pid]; if (!pp) return;
@@ -117,15 +136,29 @@
       }
       meta.hash[x.key] = hash(x.json); changed.push(x.key);
     });
+    /* 完整下載時：本機有、雲端沒有、且不是本機新增的資料 → 移除（例如雲端以版本記錄還原後） */
+    if (full) Object.keys(snap).forEach(function (k) {
+      if (onServer[k] || meta.dirty[k]) return;
+      var i = k.indexOf(':'), type = k.slice(0, i), id = k.slice(i + 1);
+      if (type === 'project') S.projects = S.projects.filter(function (p) { return p.id !== id; });
+      else S.projects.forEach(function (p) {
+        if (type === 'material') p.mats = (p.mats || []).filter(function (m) { return m.id !== id; });
+        else Object.keys(p.recs || {}).forEach(function (w) { p.recs[w] = p.recs[w].filter(function (r) { return r.id !== id; }); });
+      });
+      delete meta.hash[k]; changed.push(k);
+    });
     return changed;
   }
   function pull() {
-    return call('pull', meta.since || 0).then(function (res) {
+    var full = !fullDone;
+    return call('pull', full ? 0 : (meta.since || 0)).then(function (res) {
       me = res.me || me;
-      var changed = apply(res.items || []);
+      var changed = apply(res.items || [], full);
+      fullDone = true;
       meta.since = Math.max(0, res.now - 10000); keep();
       if (changed.length) {
         if (A().migrate) A().migrate();
+        observe(false);
         A().persist();
         var c = A().cur(), editing = /^(form|matItem|preview|matImport|dwg)$/.test(c.v);
         var mine = editing && changed.some(function (k) { return k === 'record:' + c.rid || k === 'material:' + c.mid; });
@@ -183,7 +216,8 @@
   function cycle() {
     if (busy) return Promise.resolve();
     busy = true; status();
-    return push().then(pull).then(function () { return push(); }).then(retryPhotos).then(sweepPhotos).then(function () {
+    var first = !fullDone;
+    return (first ? pull() : push().then(pull)).then(function () { return push(); }).then(retryPhotos).then(sweepPhotos).then(function () {
       lastErr = ''; meta.last = Date.now(); keep();
     }).catch(function (e) {
       lastErr = /permission|權限|You do not have|找不到|not found/i.test(e.message) ? '沒有共用資料的存取權限，請管理者分享「室內裝修抽查表單」資料夾給你' : e.message;
@@ -191,13 +225,14 @@
   }
   function changed() {
     if (!started) return;
+    observe(true);
     var pill = document.getElementById('syncPill');
     if (pill && !busy) { pill.hidden = false; pill.textContent = '有新的修改，稍後儲存到雲端'; pill.className = 'sync-pill noprint wait'; }
     clearTimeout(timer); timer = setTimeout(cycle, PUSH_MS);
   }
   function status() {
     var pill = document.getElementById('syncPill'); if (!pill) return;
-    var n = started ? pending().length + meta.photoQ.length : 0, t;
+    var n = started ? Object.keys(meta.dirty).length + meta.photoQ.length : 0, t;
     if (outdated) t = '系統已更新，請重新整理頁面（此畫面已暫停上傳）';
     else if (lastErr) t = lastErr;
     else if (meta.photoQ.length) t = '照片上傳中，尚有 ' + meta.photoQ.length + ' 張';
@@ -210,6 +245,10 @@
   }
   function init() {
     started = true;
+    /* 第一次使用新同步方式：只有雲端沒有的本機資料視為待上傳，其餘以雲端為準 */
+    var snap0 = snapshot();
+    if (meta.v !== 2) { meta.dirty = {}; Object.keys(snap0).forEach(function (k) { if (!meta.hash[k]) meta.dirty[k] = 1; }); meta.v = 2; }
+    observe(false, snap0);
     window.addEventListener('popstate', function () { if (staleOpen) { staleOpen = false; setTimeout(function () { A().rerender(); status(); }, 0); } });
     /* 切換分頁、鎖螢幕或關閉前立刻上傳（無痕視窗關閉後本機資料會清空） */
     document.addEventListener('visibilitychange', function () { clearTimeout(timer); cycle(); });
@@ -223,5 +262,6 @@
   }
 
   window.Cloud = { init: init, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
-    unsynced: function () { return started && !outdated ? pending().length + meta.photoQ.length : 0; } };
+    unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
+    reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };
 })();
