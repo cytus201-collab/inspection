@@ -5,6 +5,8 @@
   'use strict';
   if (!(window.google && google.script && google.script.run)) return;
   var META_KEY = 'inspect-cloud-meta-v1', PULL_MS = 30000, PUSH_MS = 2000;
+  var SCHEMA = 3;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
+  var outdated = false;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
   if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
   var swept = false;
@@ -27,7 +29,7 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], matOutAt: p.matOutAt || '', created: p.created });
+      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], matOutAt: p.matOutAt || '', created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
@@ -62,6 +64,7 @@
 
   /* ---------- 上傳 ---------- */
   function push() {
+    if (outdated) return Promise.resolve(0);
     var ops = pending();
     if (!ops.length) return Promise.resolve(0);
     var batch = ops.slice(0, 20);
@@ -91,11 +94,15 @@
         delete meta.hash[x.key]; changed.push(x.key); return;
       }
       try { d = JSON.parse(x.json); } catch (e) { return; }
+      if (type === 'project' && (d._v || 0) > SCHEMA) { outdated = true; return; }
       if (type === 'project') {
         var p = byId[id];
         if (!p) { p = { id: id, info: {}, recs: {}, mats: [], created: d.created }; S.projects.push(p); byId[id] = p; }
-        p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works; if (d.wOrder) p.wOrder = d.wOrder; else delete p.wOrder;
-        if (d.tpl) p.tpl = d.tpl; else delete p.tpl; p.plans = d.plans || []; p.dwgs = d.dwgs || []; p.matOutAt = d.matOutAt || '';
+        p.info = d.info || {}; if (d.works) p.works = d.works; else delete p.works; if ('wOrder' in d) { if (d.wOrder) p.wOrder = d.wOrder; else delete p.wOrder; }
+        if (d.tpl) p.tpl = d.tpl; else delete p.tpl;
+        /* 舊版畫面上傳的資料沒有這些欄位時保留本機內容，稍後會再上傳補回 */
+        if ('plans' in d) p.plans = d.plans || [];
+        if ('dwgs' in d) p.dwgs = d.dwgs || []; p.matOutAt = d.matOutAt || '';
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
@@ -188,14 +195,15 @@
   function status() {
     var pill = document.getElementById('syncPill'); if (!pill) return;
     var n = started ? pending().length + meta.photoQ.length : 0, t;
-    if (lastErr) t = lastErr;
+    if (outdated) t = '系統已更新，請重新整理頁面（此畫面已暫停上傳）';
+    else if (lastErr) t = lastErr;
     else if (meta.photoQ.length) t = '照片上傳中，尚有 ' + meta.photoQ.length + ' 張';
     else if (busy) t = '雲端同步中…';
     else if (staleOpen) t = '同事已更新此表，返回後重新開啟可看到';
     else if (n) t = '待上傳 ' + n + ' 筆';
     else t = '已儲存到雲端' + (me ? '（' + me + '）' : '');
     pill.hidden = false; pill.textContent = t;
-    pill.className = 'sync-pill noprint' + (lastErr ? ' err' : n || staleOpen ? ' wait' : '');
+    pill.className = 'sync-pill noprint' + (lastErr || outdated ? ' err' : n || staleOpen ? ' wait' : '');
   }
   function init() {
     started = true;

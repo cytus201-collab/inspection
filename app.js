@@ -1163,6 +1163,7 @@
       put: function (key, v) { return run('readwrite', function (st) { return st.put(v, key); }); },
       get: function (key) { return run('readonly', function (st) { return st.get(key); }); },
       del: function (key) { return run('readwrite', function (st) { return st.delete(key); }); },
+      keys: function () { return run('readonly', function (st) { return st.getAllKeys ? st.getAllKeys() : null; }).then(function (k) { return k || []; }); },
       all: function () {
         return db().then(function (d) {
           return new Promise(function (res) {
@@ -1469,7 +1470,38 @@
     }).join('') : '<div class="empty">尚未匯入圖說。按「匯入圖說」選擇 PDF 或圖片（可多選，PDF 每一頁會成為一張圖說）。</div>';
     fillImgs($('dwgList'));
     show('vDwgs');
+    findOrphanDwgs();
   }
+  /* 找回：這台裝置存有圖檔、但已不在任何工程清單中的圖說（例如被舊版畫面同步覆蓋） */
+  function findOrphanDwgs() {
+    $('dwgOrphans').hidden = true;
+    IDB.keys().then(function (keys) {
+      var used = {}; S.projects.forEach(function (p) { (p.dwgs || []).forEach(function (g) { used[g.img] = 1; }); });
+      var lost = keys.filter(function (k) { return /^dw_/.test(k) && !used[k]; });
+      if (!lost.length || cur.v !== 'dwgs') return;
+      $('dwgOrphans').hidden = false;
+      $('dwgOrphanList').innerHTML = lost.map(function (k) {
+        return '<label class="orphan"><input type="checkbox" value="' + k + '" checked><span class="dwg-thumb"><img alt="" data-img="' + k + '"></span></label>';
+      }).join('');
+      $('dwgOrphanMsg').textContent = '這台裝置還留有 ' + lost.length + ' 張先前匯入、但目前不在任何工程清單中的圖說。勾選後可加回本工程（色塊標記無法一併找回，需重新標記）。';
+      fillImgs($('dwgOrphanList'));
+    }).catch(function () {});
+  }
+  $('btnOrphanAdd').addEventListener('click', function () {
+    var p = proj(cur.pid), ids = Array.prototype.slice.call(document.querySelectorAll('#dwgOrphanList input:checked')).map(function (x) { return x.value; });
+    if (!ids.length) return;
+    Promise.all(ids.map(function (id, i) {
+      return loadImg(id).then(function (u) {
+        return new Promise(function (res) {
+          var im = new Image(); im.onload = function () { res({ id: uid(), name: '找回的圖說 ' + (dwgs(p).length + i + 1), img: id, w: im.naturalWidth, h: im.naturalHeight, marks: [], created: Date.now() }); };
+          im.onerror = function () { res(null); }; im.src = u;
+        });
+      });
+    })).then(function (gs) {
+      gs.filter(Boolean).forEach(function (g) { dwgs(p).push(g); if (window.Cloud) window.Cloud.uploadPhoto(g.img, thumbCache[g.img]); });
+      save(); renderDwgs();
+    });
+  });
   $('dwgList').addEventListener('click', function (e) {
     var b = e.target.closest('[data-did]'); if (b) go({ v: 'dwg', pid: cur.pid, did: b.dataset.did, link: cur.link });
   });

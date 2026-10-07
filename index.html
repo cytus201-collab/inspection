@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 </head>
 <body>
 
@@ -315,6 +315,12 @@
     <p class="muted" id="dwgMsg" role="status"></p>
     <div id="dwgList" class="dwg-list"></div>
   </section>
+  <section class="card quiet" id="dwgOrphans" hidden>
+    <h2 class="h small">找回圖說</h2>
+    <p class="muted" id="dwgOrphanMsg"></p>
+    <div class="dwg-list" id="dwgOrphanList"></div>
+    <div class="btn-row"><button type="button" class="btn primary sm" id="btnOrphanAdd">加回本工程</button></div>
+  </section>
 </main>
 
 <main id="vDwg" class="view dwg-view" hidden>
@@ -397,9 +403,9 @@
   </div>
 </div>
 
-<script src="data.js?v=22"></script>
-<script src="mat-parse.js?v=22"></script>
-<script src="cloud.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="data.js?v=23"></script>
+<script src="mat-parse.js?v=23"></script>
+<script src="cloud.js?v=23"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

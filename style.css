@@ -426,3 +426,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .pdf-row .muted{flex-basis:100%;font-weight:400}
 .pdf-host{position:fixed;left:-10000px;top:0;z-index:-1;pointer-events:none}
 .pdf-host .pdf-page{max-width:none;margin:0;border:0;box-sizing:border-box;overflow:visible;background:#fff}
+/* v23：找回圖說 */
+.orphan{position:relative;display:block;border:1.5px solid var(--strong);border-radius:8px;overflow:hidden;cursor:pointer}
+.orphan input{position:absolute;top:8px;left:8px;width:22px;height:22px;z-index:1;accent-color:#000}
