@@ -429,3 +429,16 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* v23：找回圖說 */
 .orphan{position:relative;display:block;border:1.5px solid var(--strong);border-radius:8px;overflow:hidden;cursor:pointer}
 .orphan input{position:absolute;top:8px;left:8px;width:22px;height:22px;z-index:1;accent-color:#000}
+/* v25：最近刪除 */
+.trash{justify-self:start;max-width:100%;width:100%}
+.trash>summary{display:inline-flex;align-items:center;gap:6px;cursor:pointer;list-style:none;font-size:14px;font-weight:700;padding:6px 14px;border:1.5px solid var(--line);border-radius:999px;color:var(--ink2)}
+.trash>summary::-webkit-details-marker{display:none}
+.trash[open]>summary{border-color:var(--strong);color:var(--ink)}
+.tr-n{min-width:20px;text-align:center;font-size:12px;background:var(--ink);color:var(--bg);border-radius:999px;padding:0 6px}
+.trash>p{margin:8px 0 6px}
+.tr-row{cursor:default}
+.tr-row .btn{padding:4px 10px;font-size:13px;flex:none}
+.tr-del{flex:none;font-size:16px;text-decoration:none;padding:4px 6px;color:var(--muted)}
+.wrap>*{min-width:0}
+.trash{min-width:0}
+.trash .day-list{max-width:100%}

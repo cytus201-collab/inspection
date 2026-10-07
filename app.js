@@ -201,7 +201,7 @@
     }, 0);
   }
   function render() {
-    purgeDrafts();
+    purgeDrafts(); purgeTrash();
     var p = cur.pid && proj(cur.pid), w = cur.wid && WORK[cur.wid];
     if (cur.v !== 'projects' && !p) cur = { v: 'projects' };
     else if (/^(work|form|preview)$/.test(cur.v) && !w) cur = { v: 'project', pid: cur.pid };
@@ -232,6 +232,7 @@
     }).join('');
     $('projectList').innerHTML = html || '<div class="empty">還沒有工程。按「新增工程」建立第一個，填入基本資料後即可開始抽查。</div>';
     $('backupMsg').textContent = saveMsg;
+    renderTrash('trashBoxP', S.trash); $('trashMsgP').textContent = '';
     show('vProjects');
   }
   $('projectList').addEventListener('click', function (e) {
@@ -329,6 +330,7 @@
     $('infoForm').innerHTML = INFO_FIELDS.map(function (f) { return fieldHtml('i_', f, I[f.k]); }).join('');
     $('infoCard').open = !I.name || !!cur.focus;
     $('infoSaved').textContent = saveMsg || '已自動儲存';
+    renderTrash('trashBox', p.trash); $('trashMsg').textContent = '';
     show('vProject');
     if (cur.focus) { delete cur.focus; try { history.replaceState(cur, ''); } catch (e) {} setTimeout(function () { $('i_name').focus(); }, 50); }
   }
@@ -423,8 +425,9 @@
   });
   $('btnDelProject').addEventListener('click', function () {
     var p = proj(cur.pid), n = 0; Object.keys(p.recs).forEach(function (w) { n += p.recs[w].length; });
-    ask('刪除「' + (p.info.name || '未命名工程') + '」？', '此工程底下 ' + n + ' 份抽查紀錄與 ' + p.mats.length + ' 項材料管制資料都會刪除，無法復原。', '取消', '刪除工程', function () {
-      S.projects.splice(S.projects.indexOf(p), 1); save(); go({ v: 'projects' }, true);
+    ask('刪除「' + (p.info.name || '未命名工程') + '」？', '此工程與底下 ' + n + ' 份抽查紀錄、' + p.mats.length + ' 項材料會移到工程清單最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除工程', function () {
+      S.projects.splice(S.projects.indexOf(p), 1);
+      (S.trash || (S.trash = [])).push({ id: uid(), type: 'proj', at: Date.now(), data: p }); save(); go({ v: 'projects' }, true);
     });
   });
 
@@ -711,9 +714,10 @@
 
   $('btnDelRec').addEventListener('click', function () {
     var r = R();
-    ask('刪除紀錄 ' + r.docNo + '？', '刪除後無法復原。', '取消', '刪除紀錄', function () {
-      (r.photos || []).forEach(function (x) { IDB.del(x.id).catch(function () {}); });
-      var list = recs(proj(cur.pid), cur.wid); list.splice(list.indexOf(r), 1); save();
+    if (r.draft) { var dl = recs(proj(cur.pid), cur.wid); dl.splice(dl.indexOf(r), 1); save(); history.back(); return; }
+    ask('刪除紀錄 ' + r.docNo + '？', '會移到工程頁最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除紀錄', function () {
+      var p = proj(cur.pid), list = recs(p, cur.wid); list.splice(list.indexOf(r), 1);
+      toTrash(p, 'rec', r, { wid: cur.wid }); save();
       history.back();
     });
   });
@@ -1008,8 +1012,8 @@
   $('btnMatDone').addEventListener('click', function () { history.back(); });
   $('btnMatDel').addEventListener('click', function () {
     var p = proj(cur.pid), m = M();
-    ask('刪除「' + (m.name || '未命名材料') + '」？', '此材料的送審、進場與抽查紀錄都會刪除。', '取消', '刪除材料', function () {
-      p.mats.splice(p.mats.indexOf(m), 1); save(); go({ v: 'materials', pid: p.id }, true);
+    ask('刪除「' + (m.name || '未命名材料') + '」？', '會移到工程頁最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除材料', function () {
+      p.mats.splice(p.mats.indexOf(m), 1); toTrash(p, 'mat', m); save(); go({ v: 'materials', pid: p.id }, true);
     });
   });
 
@@ -1861,8 +1865,8 @@
   });
   $('dwDel').addEventListener('click', function () {
     var p = proj(cur.pid), g = G();
-    ask('刪除圖說「' + g.name + '」？', '圖上的 ' + g.marks.length + ' 個色塊也會一併刪除，抽查紀錄不受影響。', '取消', '刪除圖說', function () {
-      p.dwgs = dwgs(p).filter(function (x) { return x !== g; }); save(); IDB.del(g.img).catch(function () {});
+    ask('刪除圖說「' + g.name + '」？', '圖說與 ' + g.marks.length + ' 個色塊會移到工程頁最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除圖說', function () {
+      p.dwgs = dwgs(p).filter(function (x) { return x !== g; }); toTrash(p, 'dwg', g); save();
       history.back();
     });
   });
@@ -1921,6 +1925,85 @@
     var p = proj(cur.pid), ls = linkedMarks(p, cur.wid + '|' + cur.rid);
     $('pinInfo').textContent = ls.length ? '已標記 ' + ls.length + ' 處，列印時附上抽查位置圖' : dwgs(p).length ? '' : '尚未匯入圖說';
   }
+
+  /* ========== 最近刪除（回收桶）：保留 7 天，到期自動永久刪除 ========== */
+  var TRASH_DAYS = 7, DAY = 86400000;
+  function toTrash(p, type, data, extra) {
+    (p.trash || (p.trash = [])).push(Object.assign({ id: uid(), type: type, at: Date.now(), data: data }, extra || {}));
+  }
+  function trashImgs(t) {
+    var d = t.data, ids = [];
+    if (t.type === 'rec') (d.photos || []).forEach(function (x) { ids.push(x.id); });
+    if (t.type === 'dwg') ids.push(d.img);
+    if (t.type === 'proj') {
+      Object.keys(d.recs || {}).forEach(function (w) { (d.recs[w] || []).forEach(function (r) { (r.photos || []).forEach(function (x) { ids.push(x.id); }); }); });
+      (d.dwgs || []).forEach(function (g) { ids.push(g.img); });
+      (d.trash || []).forEach(function (x) { ids = ids.concat(trashImgs(x)); });
+    }
+    return ids;
+  }
+  function purgeTrash() {
+    var limit = Date.now() - TRASH_DAYS * DAY, changed = false;
+    var keep = function (list) { return (list || []).filter(function (t) { if (t.at >= limit) return true; trashImgs(t).forEach(function (id) { IDB.del(id).catch(function () {}); }); changed = true; return false; }); };
+    S.trash = keep(S.trash);
+    S.projects.forEach(function (p) { if (p.trash && p.trash.length) p.trash = keep(p.trash); });
+    if (changed) save();
+  }
+  function trashLabel(t) {
+    var d = t.data, w = t.wid && WORK[t.wid];
+    if (t.type === 'rec') return { tag: '抽查表', name: (w ? (w.kind === 'phased' ? w.name + '(' + (d.phase + 1) + ')' : w.name) + ' ' : '') + d.docNo, sub: [d.checkDate && roc(d.checkDate, '.'), d.location].filter(Boolean).join(' · ') };
+    if (t.type === 'mat') return { tag: '材料', name: d.name || '未命名材料', sub: d.no || '' };
+    if (t.type === 'dwg') return { tag: '圖說', name: d.name, sub: d.marks.length + ' 個色塊' };
+    var n = 0; Object.keys(d.recs || {}).forEach(function (k) { n += d.recs[k].length; });
+    return { tag: '工程', name: d.info.name || '未命名工程', sub: n + ' 份紀錄' };
+  }
+  function trashHtml(list) {
+    var now = Date.now();
+    return list.slice().sort(function (a, b) { return b.at - a.at; }).map(function (t) {
+      var L = trashLabel(t), left = Math.max(1, Math.ceil((t.at + TRASH_DAYS * DAY - now) / DAY));
+      return '<li class="dl-item"><div class="dl-row tr-row"><span class="dl-tag">' + L.tag + '</span><span class="dl-txt"><b>' + esc(L.name) + '</b><small>' +
+        esc([L.sub, left + ' 天後永久刪除'].filter(Boolean).join(' · ')) + '</small></span>' +
+        '<button type="button" class="btn ghost sm" data-tr-restore="' + t.id + '">復原</button>' +
+        '<button type="button" class="link tr-del" data-tr-del="' + t.id + '" aria-label="永久刪除">✕</button></div></li>';
+    }).join('');
+  }
+  function renderTrash(box, list) {
+    var b = $(box); b.hidden = !list || !list.length; if (b.hidden) return;
+    b.querySelector('.tr-n').textContent = list.length;
+    b.querySelector('ul').innerHTML = trashHtml(list);
+  }
+  function restoreTrash(p, t) {
+    var d = t.data;
+    if (t.type === 'rec') {
+      var list = recs(p, t.wid);
+      if (list.some(function (r) { return r.phase === d.phase && r.docNo === d.docNo; })) {
+        d.seq = list.filter(function (r) { return r.phase === d.phase; }).reduce(function (m, r) { return Math.max(m, r.seq); }, 0) + 1;
+        var w = WORK[t.wid]; d.docNo = (p.info.code ? p.info.code + '-' : '') + w.code + (w.kind === 'phased' ? (d.phase + 1) : '') + '-' + ('00' + d.seq).slice(-3);
+      }
+      list.push(d); return '已復原「' + d.docNo + '」';
+    }
+    if (t.type === 'mat') { p.mats.push(d); return '已復原材料「' + (d.name || '') + '」'; }
+    if (t.type === 'dwg') { dwgs(p).push(d); return '已復原圖說「' + d.name + '」'; }
+  }
+  $('trashBox').addEventListener('click', function (e) {
+    var p = proj(cur.pid), b = e.target.closest('[data-tr-restore],[data-tr-del]'); if (!b || !p) return;
+    var id = b.dataset.trRestore || b.dataset.trDel, t = (p.trash || []).filter(function (x) { return x.id === id; })[0]; if (!t) return;
+    if (b.dataset.trRestore) {
+      p.trash = p.trash.filter(function (x) { return x !== t; }); var msg = restoreTrash(p, t); save(); renderProject(); $('trashBox').open = true; $('trashMsg').textContent = msg + '。';
+    } else ask('永久刪除？', '「' + trashLabel(t).name + '」刪除後無法再復原。', '取消', '永久刪除', function () {
+      p.trash = p.trash.filter(function (x) { return x !== t; }); trashImgs(t).forEach(function (i) { IDB.del(i).catch(function () {}); }); save(); renderProject(); $('trashBox').open = true;
+    });
+  });
+  $('trashBoxP').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-tr-restore],[data-tr-del]'); if (!b) return;
+    var id = b.dataset.trRestore || b.dataset.trDel, t = (S.trash || []).filter(function (x) { return x.id === id; })[0]; if (!t) return;
+    if (b.dataset.trRestore) {
+      S.trash = S.trash.filter(function (x) { return x !== t; });
+      if (!proj(t.data.id)) S.projects.push(t.data); save(); renderProjects(); $('trashBoxP').open = true; $('trashMsgP').textContent = '已復原工程「' + (t.data.info.name || '') + '」。';
+    } else ask('永久刪除？', '「' + trashLabel(t).name + '」與底下所有紀錄刪除後無法再復原。', '取消', '永久刪除', function () {
+      S.trash = S.trash.filter(function (x) { return x !== t; }); trashImgs(t).forEach(function (i) { IDB.del(i).catch(function () {}); }); save(); renderProjects(); $('trashBoxP').open = true;
+    });
+  });
 
   /* ---------- 對話框 ---------- */
   var dlgYesFn = null;
