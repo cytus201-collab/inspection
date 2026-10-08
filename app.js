@@ -1432,7 +1432,7 @@
     var cm = cnt(d.mats), cc = cnt(d.cons), cd = cnt(d.defs), fixedN = d.defs.filter(function (x) { return x.st === 'fixed'; }).length;
     var paper = $('paper'); paper.className = 'paper sum-paper';
     paper.innerHTML = '<div class="sum-title"><h3>「' + esc(I.name || '') + '」</h3><p>工程抽查總表</p>' + (I.supervisor ? '<p class="sum-sup">' + esc(I.supervisor) + '</p>' : '') + '</div>' +
-      '<p class="sum-asof">截至 ' + roc(to) + '<br><span>本期：' + roc(from, '/') + ' ～ ' + roc(to, '/') + '</span></p>' +
+      '<p class="sum-asof">截至 ' + roc(to) + '</p>' +
       '<h4>一、材料進場抽驗情形：</h4>' + head(cm) + '</p>' + tbl(d.mats, COLS, basic) +
       '<h4>二、分項施工抽查情形：</h4>' + head(cc) + '</p>' + tbl(d.cons, COLS, basic) +
       '<h4>三、缺失改善追蹤情形：' + (d.defs.length ? '' : '無') + '</h4>' + head(cd) + '　　已改善：<b>' + fixedN + '</b> 次　未改善：<b>' + (d.defs.length - fixedN) + '</b> 次</p>' +
@@ -1440,7 +1440,7 @@
         return '<td>' + esc(x.name) + '</td><td class="c">' + esc(x.loc) + '</td><td class="c">' + roc(x.date, '/') + '</td><td>' + esc(x.txt) + '</td><td class="c">' + (x.st === 'fixed' ? esc(x.fixed) : '<b class="sum-ng">' + esc(x.fixed) + '</b>') + '</td>';
       }) : '') +
       sumSubmit(p, to) +
-      '<p class="sum-note">註：灰色為前期（' + roc(from, '/') + ' 以前）紀錄；不含尚未確認存檔的草稿。</p>' + foot();
+      foot();
     bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
