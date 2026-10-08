@@ -273,7 +273,7 @@
 
   /* ========== 1 工程清單 ========== */
   /* 個人版／共編版切換：個人版在 GitHub，共編版在 Google Apps Script */
-  var PERSONAL_URL = 'https://cytus201-collab.github.io/inspection/', CO_URL_DEFAULT = '';
+  var PERSONAL_URL = 'https://cytus201-collab.github.io/inspection/', CO_URL_DEFAULT = 'https://script.google.com/macros/s/AKfycbxci9ZymyINwrKblPts7ACxfFevhfgwMF3QT9JNw6hPIrUiNRnbywxC1bOuOtVhSEngDA/exec';
   var IS_CO = !!(window.google && google.script && google.script.run);
   function coUrl() {
     try { var q = new URLSearchParams(location.search).get('co'); if (q && /^https:\/\/script\.google\.com\//.test(q)) { localStorage.setItem('coedit-url', q); history.replaceState(history.state, '', location.pathname); } } catch (e) {}
@@ -317,8 +317,10 @@
   $('projectList').addEventListener('click', function (e) {
     var b = e.target.closest('[data-pid]'); if (b) go({ v: 'project', pid: b.dataset.pid });
   });
+  function lastPhrases() { var p = S.projects.filter(function (x) { return x.phrases && x.phrases.length; }).pop(); return p ? JSON.parse(JSON.stringify(p.phrases)) : null; }
   $('btnNewProject').addEventListener('click', function () {
     var p = { id: uid(), info: { durType: '日曆天', changeCount: '0', extendDays: '0' }, recs: {}, mats: [], created: Date.now() };
+    var ph = lastPhrases(); if (ph) p.phrases = ph;
     S.projects.unshift(p); save(); go({ v: 'project', pid: p.id, focus: 1 });
   });
   $('btnExport').addEventListener('click', function () {
@@ -685,7 +687,7 @@
     save();
   });
   /* 定型文：可自訂（長按或按右鍵任一定型文進入編輯）；存在本機，也會一併匯出到備份檔 */
-  function phrases() { return (S.phrases && S.phrases.length) ? S.phrases : (D.phrases || []); }
+  function phrases() { var p = cur.pid && proj(cur.pid); return (p && p.phrases && p.phrases.length) ? p.phrases : (S.phrases && S.phrases.length) ? S.phrases : (D.phrases || []); }
   var PH_SYM = { ok: '○', na: '／', ng: '╳' };
   function phToText(list) { return list.map(function (f) { return f.t + (f.r ? ' ' + PH_SYM[f.r] : ''); }).join('\n'); }
   function phFromText(txt) {
@@ -696,7 +698,7 @@
     }).filter(function (f) { return f.t; });
   }
   var phLong = false, phTimer = null;
-  function openPhEdit() { $('phText').value = phToText(phrases()); $('phDlg').hidden = false; $('phText').focus(); }
+  function openPhEdit() { $('phText').value = phToText(phrases()); $('phAll').checked = true; $('phDlg').hidden = false; $('phText').focus(); }
   $('groups').addEventListener('pointerdown', function (e) {
     if (!e.target.closest('[data-ph]')) return;
     clearTimeout(phTimer); phTimer = setTimeout(function () { phLong = true; openPhEdit(); }, 550);
@@ -706,8 +708,10 @@
   $('phCancel').addEventListener('click', function () { $('phDlg').hidden = true; });
   $('phReset').addEventListener('click', function () { $('phText').value = phToText(D.phrases || []); });
   $('phSave').addEventListener('click', function () {
-    var list = phFromText($('phText').value);
-    S.phrases = list.length ? list : null; if (!S.phrases) delete S.phrases;
+    /* 定型文存在工程資料內，共編時同事共用；勾選「套用到所有工程」則每個工程同一套 */
+    var list = phFromText($('phText').value), targets = $('phAll').checked ? S.projects : [proj(cur.pid)];
+    targets.forEach(function (p) { if (!p) return; if (list.length) p.phrases = JSON.parse(JSON.stringify(list)); else delete p.phrases; });
+    delete S.phrases;
     $('phDlg').hidden = true; save();
     if (cur.v === 'form') { var w = W(); if (w.kind === 'irregular') renderRows(); else renderGroups(); }
   });
@@ -2236,6 +2240,91 @@
     } else ask('永久刪除？', '「' + trashLabel(t).name + '」與底下所有紀錄刪除後無法再復原。', '取消', '永久刪除', function () {
       S.trash = S.trash.filter(function (x) { return x !== t; }); trashImgs(t).forEach(function (i) { IDB.del(i).catch(function () {}); }); save(); renderProjects(); $('trashBoxP').open = true;
     });
+  });
+
+  /* ========== 全域搜尋：Ctrl＋K、⌘K 或 / 開啟；手機按頂列放大鏡 ========== */
+  var srItems = [], srAct = 0, srRes = [];
+  function srIndex() {
+    var out = [];
+    S.projects.forEach(function (p) {
+      var pn = p.info.name || '未命名工程';
+      out.push({ pid: p.id, pn: pn, tag: '工程', title: pn, sub: [p.info.code, p.info.contractor].filter(Boolean).join(' · '), text: [pn, p.info.code, p.info.owner, p.info.contractor, p.info.supervisor].join(' '), go: { v: 'project', pid: p.id } });
+      Object.keys(p.recs || {}).forEach(function (wid) {
+        var w = WORK[wid]; if (!w) return;
+        (p.recs[wid] || []).forEach(function (r) {
+          if (r.draft) return;
+          var m = w.kind === 'matform' && matById(p, r.mid), notes = [];
+          Object.keys(r.res || {}).forEach(function (k) { var c = r.res[k]; if (c && c.note) notes.push(c.note); });
+          Object.keys(r.extra || {}).forEach(function (g) { (r.extra[g] || []).forEach(function (x) { notes.push(x.name, x.note); }); });
+          (r.rows || []).forEach(function (x) { notes.push(x.name, x.note); });
+          (r.photos || []).forEach(function (x) { notes.push(x.cap); });
+          notes.push(r.remark, r.methodNote);
+          var title = (m ? '材料抽查：' + m.name : w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : w.name) + ' ' + r.docNo;
+          out.push({ pid: p.id, pn: pn, tag: '抽查表', title: title, sub: [r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · '),
+            text: [title, r.location, r.checkDate, roc(r.checkDate || '', '.'), notes.filter(Boolean).join(' ')].join(' '), go: { v: 'form', pid: p.id, wid: wid, rid: r.id } });
+        });
+      });
+      (p.mats || []).forEach(function (m) {
+        out.push({ pid: p.id, pn: pn, tag: '材料', title: m.name || '未命名材料', sub: [m.no, MSTAT[matStatus(m)]].filter(Boolean).join(' · '), text: [m.name, m.no, m.qty, m.remark, m.inspNote].join(' '), go: { v: 'matItem', pid: p.id, mid: m.id } });
+      });
+      (p.dwgs || []).forEach(function (g) {
+        var labels = g.marks.map(function (m) { var li = linkInfo(p, m.rid); return [m.t, li && li.short].filter(Boolean).join(' '); }).join(' ');
+        out.push({ pid: p.id, pn: pn, tag: '圖說', title: g.name, sub: g.marks.length + ' 個標記', text: [g.name, labels].join(' '), go: { v: 'dwg', pid: p.id, did: g.id } });
+      });
+    });
+    return out;
+  }
+  function srSnip(text, toks) {
+    var low = text.toLowerCase(), i = -1;
+    toks.some(function (t) { i = low.indexOf(t); return i >= 0; });
+    if (i < 0) return '';
+    var a = Math.max(0, i - 12), s0 = text.slice(a, i + 28).replace(/\s+/g, ' ');
+    return (a ? '…' : '') + s0 + (i + 28 < text.length ? '…' : '');
+  }
+  function srRender() {
+    var q = $('srInput').value.trim().toLowerCase(), toks = q.split(/\s+/).filter(Boolean), only = $('srScope').checked && cur.pid;
+    srRes = !toks.length ? [] : srItems.filter(function (it) {
+      if (only && it.pid !== cur.pid) return false;
+      var h = (it.title + ' ' + it.sub + ' ' + it.text).toLowerCase();
+      return toks.every(function (t) { return h.indexOf(t) >= 0; });
+    }).sort(function (a, b) { var ta = toks.every(function (t) { return (a.title + a.sub).toLowerCase().indexOf(t) >= 0; }), tb = toks.every(function (t) { return (b.title + b.sub).toLowerCase().indexOf(t) >= 0; }); return (tb - ta); }).slice(0, 60);
+    srAct = 0;
+    var last = null, html = '';
+    srRes.forEach(function (it, i) {
+      if (it.pid !== last && !only) { html += '<li class="sr-grp">' + esc(it.pn) + '</li>'; last = it.pid; }
+      var inTitle = toks.every(function (t) { return (it.title + it.sub).toLowerCase().indexOf(t) >= 0; });
+      html += '<li class="sr-item' + (i === srAct ? ' act' : '') + '" data-sr="' + i + '" role="option"><span class="dl-tag">' + it.tag + '</span><span class="dl-txt"><b>' + esc(it.title) + '</b><small>' +
+        esc(inTitle ? it.sub : srSnip(it.text, toks) || it.sub) + '</small></span></li>';
+    });
+    $('srList').innerHTML = toks.length ? (html || '<li class="sr-none">找不到「' + esc(q) + '」</li>') : '<li class="sr-none">輸入關鍵字，例如編號「RB2」、位置「3F」、日期「115.09」或備註文字。多個關鍵字以空白分隔。</li>';
+  }
+  function srMove(d) {
+    if (!srRes.length) return;
+    srAct = (srAct + d + srRes.length) % srRes.length;
+    $('srList').querySelectorAll('.sr-item').forEach(function (x) { x.classList.toggle('act', +x.dataset.sr === srAct); if (+x.dataset.sr === srAct) x.scrollIntoView({ block: 'nearest' }); });
+  }
+  function srOpen() {
+    srItems = srIndex(); $('srScopeBox').hidden = !cur.pid; if (!cur.pid) $('srScope').checked = false;
+    $('srDlg').hidden = false; $('srInput').select(); $('srInput').focus(); srRender();
+  }
+  function srClose() { $('srDlg').hidden = true; }
+  function srGo(i) { var it = srRes[i]; if (!it) return; srClose(); go(it.go); }
+  $('btnSearch').addEventListener('click', srOpen);
+  $('srClose').addEventListener('click', srClose);
+  $('srDlg').addEventListener('click', function (e) { if (e.target === $('srDlg')) srClose(); var li = e.target.closest('[data-sr]'); if (li) srGo(+li.dataset.sr); });
+  $('srInput').addEventListener('input', srRender);
+  $('srScope').addEventListener('change', srRender);
+  $('srInput').addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); srMove(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); srMove(-1); }
+    else if (e.key === 'Enter') { e.preventDefault(); srGo(srAct); }
+    else if (e.key === 'Escape') { e.preventDefault(); srClose(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    var typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || '')) || e.target.isContentEditable;
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); if ($('srDlg').hidden) srOpen(); else srClose(); }
+    else if (e.key === '/' && !typing && $('srDlg').hidden) { e.preventDefault(); srOpen(); }
+    else if (e.key === 'Escape' && !$('srDlg').hidden) srClose();
   });
 
   /* ---------- 對話框 ---------- */

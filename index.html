@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
 
@@ -20,6 +20,7 @@
       <p class="tb-sub" id="tbSub"></p>
     </div>
     <div class="tb-right" id="tbRight"></div>
+    <button type="button" class="tb-search" id="btnSearch" aria-label="搜尋" title="搜尋（Ctrl＋K）"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
   </div>
 </header>
 
@@ -420,11 +421,23 @@
     </div>
   </div>
 </div>
+<div class="dialog sr-dlg" id="srDlg" hidden>
+  <div class="dialog-box sr-box" role="dialog" aria-modal="true" aria-label="搜尋">
+    <div class="sr-head">
+      <input id="srInput" type="search" placeholder="搜尋編號、位置、日期、備註、材料、圖說…" autocomplete="off" enterkeyhint="search">
+      <button type="button" class="link" id="srClose">關閉</button>
+    </div>
+    <label class="chk sr-scope" id="srScopeBox"><input type="checkbox" id="srScope"><span>只搜目前工程</span></label>
+    <ul class="sr-list" id="srList" role="listbox"></ul>
+    <p class="muted sr-hint">↑↓ 選擇・Enter 開啟・Esc 關閉　（電腦可按 Ctrl＋K 或 / 開啟搜尋）</p>
+  </div>
+</div>
 <div class="dialog" id="phDlg" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="phTitle">
     <h2 id="phTitle">編輯定型文</h2>
     <p class="muted">每行一個。結尾加「○」或「／」，點選時會一併帶入判定。</p>
     <textarea id="phText" rows="9" class="ph-text"></textarea>
+    <label class="chk ph-all"><input type="checkbox" id="phAll" checked><span>同時套用到所有工程</span></label>
     <div class="btn-row between">
       <button type="button" class="link" id="phReset">恢復預設</button>
       <div class="btn-row"><button type="button" class="btn ghost" id="phCancel">取消</button><button type="button" class="btn primary" id="phSave">儲存</button></div>
@@ -442,9 +455,9 @@
   </div>
 </div>
 
-<script src="data.js?v=30"></script>
-<script src="mat-parse.js?v=30"></script>
-<script src="cloud.js?v=30"></script>
-<script src="app.js?v=30"></script>
+<script src="data.js?v=31"></script>
+<script src="mat-parse.js?v=31"></script>
+<script src="cloud.js?v=31"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

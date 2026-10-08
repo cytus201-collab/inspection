@@ -476,3 +476,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .mode-switch a{padding:5px 14px;font-size:14px;font-weight:700;color:var(--ink);text-decoration:none;cursor:pointer}
 .mode-switch a.on{background:var(--strong);color:var(--inv);cursor:default}
 .ph-thumb img{-webkit-user-drag:none;user-select:none}
+/* v31：全域搜尋、定型文套用範圍 */
+.tb-search{flex:none;display:grid;place-items:center;width:38px;height:38px;border:1.5px solid var(--inv);border-radius:8px;background:transparent;color:var(--inv);cursor:pointer;padding:0}
+.ph-all{font-size:14px;margin:0 0 10px}
+.sr-dlg{align-items:start;justify-items:center}
+@media (max-width:600px){.sr-dlg{padding:0}}
+.sr-box{width:min(640px,calc(100% - 24px));margin-top:8vh;max-height:80vh;display:flex;flex-direction:column;gap:8px}
+.sr-head{display:flex;gap:10px;align-items:center}
+.sr-head input{flex:1;min-width:0;padding:10px 12px;border:1.5px solid var(--strong);border-radius:8px;font-size:16px;background:var(--bg);color:var(--ink)}
+.sr-scope{font-size:14px}
+.sr-list{list-style:none;margin:0;padding:0;overflow:auto;border:1.5px solid var(--line);border-radius:8px;min-height:60px}
+.sr-grp{padding:6px 12px;font-size:12px;font-weight:800;color:var(--muted);background:var(--panel);position:sticky;top:0}
+.sr-item{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-top:1px solid var(--line)}
+.sr-item.act,.sr-item:hover{background:var(--panel)}
+.sr-item.act{box-shadow:inset 3px 0 0 var(--strong)}
+.sr-none{padding:14px 12px;color:var(--muted);font-size:14px}
+.sr-hint{font-size:12px;margin:0}
+@media (max-width:600px){.sr-box{margin-top:0;max-height:100vh;height:100%;width:100%;border-radius:0}.sr-hint{display:none}}

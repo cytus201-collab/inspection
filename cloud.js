@@ -7,7 +7,7 @@
   'use strict';
   if (!(window.google && google.script && google.script.run)) return;
   var META_KEY = 'inspect-cloud-meta-v1', PULL_MS = 30000, PUSH_MS = 2000;
-  var SCHEMA = 6;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
+  var SCHEMA = 7;   // 工程資料格式版本：較舊的畫面讀到較新的資料時暫停上傳，避免覆蓋掉新欄位（例如圖說）
   var outdated = false;
   var meta = load() || { hash: {}, since: 0, photoQ: [] };
   if (!meta.up) meta.up = {};   // 已確認上傳到雲端的照片
@@ -34,7 +34,7 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], matOutAt: p.matOutAt || '', created: p.created });
+      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], phrases: p.phrases || null, matOutAt: p.matOutAt || '', created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
@@ -122,7 +122,8 @@
         /* 舊版畫面上傳的資料沒有這些欄位時保留本機內容，並標記稍後上傳補回 */
         if ('plans' in d) p.plans = d.plans || []; else if ((p.plans || []).length) meta.dirty[x.key] = 1;
         if ('dwgs' in d) p.dwgs = d.dwgs || []; else if ((p.dwgs || []).length) meta.dirty[x.key] = 1;
-        if ('trash' in d) p.trash = d.trash || []; p.matOutAt = d.matOutAt || '';
+        if ('trash' in d) p.trash = d.trash || [];
+        if ('phrases' in d) { if (d.phrases) p.phrases = d.phrases; else delete p.phrases; } else if (p.phrases) meta.dirty[x.key] = 1; p.matOutAt = d.matOutAt || '';
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
