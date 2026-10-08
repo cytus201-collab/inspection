@@ -517,3 +517,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sum-paper .sum-none{margin:2px 0 6px 2em;color:#666}
 .sum-paper .sum-note{font-size:8.5pt;margin:8px 0 0;color:#555}
 @media print{.sum-paper table.sum tr{break-inside:avoid}.sum-paper h4{break-after:avoid}}
+.sum-paper .sum-sub{margin:10px 0 4px 1em;font-weight:700}
+.sum-paper table.sum-stat{margin:4px 0 2px}

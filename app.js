@@ -44,6 +44,7 @@
     { k: 'factory', l: '是否驗廠／廠驗', t: 'select', opts: ['', '是', '否'] }
   ];
   var MAT_TRACK = [
+    { k: 'planUse', l: '預定施工日期', t: 'date' },
     { k: 'planSubmit', l: '預定送審日期', t: 'date' }, { k: 'actualSubmit', l: '實際送審日期', t: 'date' },
     { k: 'factoryDate', l: '驗廠／廠驗日期', t: 'date' },
     { k: 'reviewDate', l: '審查日期', t: 'date' },
@@ -1383,6 +1384,36 @@
     var by = function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.no < b.no ? -1 : a.no > b.no ? 1 : 0; };
     return { cons: cons.sort(by), mats: mats.sort(by), defs: defs.sort(by) };
   }
+  /* 四、材料／設備送審情形：依「截至」日判斷已送審、審查中、退回修正、尚未送審 */
+  function sumSubmit(p, to) {
+    var ms = p.mats || [], g = { ok: [], rev: [], back: [], todo: [] }, late = 0;
+    ms.forEach(function (m) {
+      var sent = m.actualSubmit && m.actualSubmit <= to, rd = !m.reviewDate || m.reviewDate <= to;
+      if (sent && m.reviewResult === '核定' && rd) g.ok.push(m);
+      else if (sent && /修正|不核定/.test(m.reviewResult || '') && rd) g.back.push(m);
+      else if (sent) g.rev.push(m);
+      else { g.todo.push(m); if (m.planSubmit && m.planSubmit < to) late++; }
+    });
+    var n = ms.length, sentN = n - g.todo.length, pct = function (a) { return n ? Math.round(a / n * 100) + '%' : '—'; };
+    var d = function (v) { return v ? roc(v, '/') : ''; };
+    var by = function (a, b) { var x = a.planSubmit || '9', y = b.planSubmit || '9'; return x < y ? -1 : x > y ? 1 : 0; };
+    var sub = function (title, list, last) {
+      if (!list.length) return '<p class="sum-sub">' + title + '：無</p>';
+      return '<p class="sum-sub">' + title + '（' + list.length + ' 項）</p><table class="sum"><colgroup><col style="width:7%"><col style="width:33%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"></colgroup>' +
+        '<thead><tr><th>編號</th><th>各項材料／設備送審</th><th>預定施工日期</th><th>預定送審日期</th><th>實際送審日期</th><th>' + last[0] + '</th></tr></thead><tbody>' +
+        list.slice().sort(by).map(function (m, i) {
+          var overdue = !m.actualSubmit || m.actualSubmit > to ? (m.planSubmit && m.planSubmit < to) : false;
+          return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc([m.no, m.name].filter(Boolean).join(' ')) + '</td><td class="c">' + d(m.planUse) + '</td>' +
+            '<td class="c">' + (overdue ? '<b class="sum-ng">' + d(m.planSubmit) + '</b>' : d(m.planSubmit)) + '</td><td class="c">' + (m.actualSubmit && m.actualSubmit <= to ? d(m.actualSubmit) : '') + '</td><td class="c">' + last[1](m) + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    };
+    return '<h4>四、各項材料／設備送審情形：' + (n ? '' : '尚未建立材料清單') + '</h4>' + (n ?
+      '<table class="sum sum-stat"><thead><tr><th>總數量</th><th>已提送</th><th>逾期未送</th><th>已核定</th><th>審查中</th><th>退回修正</th><th>送審比例</th><th>核可比例</th></tr></thead><tbody><tr>' +
+      [n, sentN, late ? '<b class="sum-ng">' + late + '</b>' : 0, g.ok.length, g.rev.length, g.back.length, pct(sentN), pct(g.ok.length)].map(function (v) { return '<td class="c">' + v + '</td>'; }).join('') + '</tr></tbody></table>' +
+      sub('（一）尚未送審', g.todo, ['備註', function (m) { return m.planSubmit && m.planSubmit < to ? '<b class="sum-ng">逾期未送</b>' : ''; }]) +
+      sub('（二）已送審、尚未核定', g.rev.concat(g.back), ['審查結果', function (m) { return g.back.indexOf(m) >= 0 ? '<b class="sum-ng">' + esc(m.reviewResult) + '</b>' + (m.reviewDate ? '<br>' + d(m.reviewDate) : '') : '審查中'; }]) +
+      sub('（三）已核定', g.ok, ['核定日期', function (m) { return d(m.reviewDate); }]) : '');
+  }
   function renderSumPrint() {
     var p = proj(cur.pid), I = p.info, to = cur.to || today(), from = cur.from || sumFromDef(to), d = sumData(p, to);
     topbar('列印預覽', '抽查總表', I.name);
@@ -1408,6 +1439,7 @@
       (d.defs.length ? tbl(d.defs, [['項次', '7%'], ['項目名稱', '22%'], ['位置', '13%'], ['抽驗日期', '12%'], ['缺失內容', '28%'], ['改善情形', '18%']], function (x) {
         return '<td>' + esc(x.name) + '</td><td class="c">' + esc(x.loc) + '</td><td class="c">' + roc(x.date, '/') + '</td><td>' + esc(x.txt) + '</td><td class="c">' + (x.st === 'fixed' ? esc(x.fixed) : '<b class="sum-ng">' + esc(x.fixed) + '</b>') + '</td>';
       }) : '') +
+      sumSubmit(p, to) +
       '<p class="sum-note">註：灰色為前期（' + roc(from, '/') + ' 以前）紀錄；不含尚未確認存檔的草稿。</p>' + foot();
     bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
