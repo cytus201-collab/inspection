@@ -272,7 +272,30 @@
   }
 
   /* ========== 1 工程清單 ========== */
+  /* 個人版／共編版切換：個人版在 GitHub，共編版在 Google Apps Script */
+  var PERSONAL_URL = 'https://cytus201-collab.github.io/inspection/', CO_URL_DEFAULT = '';
+  var IS_CO = !!(window.google && google.script && google.script.run);
+  function coUrl() {
+    try { var q = new URLSearchParams(location.search).get('co'); if (q && /^https:\/\/script\.google\.com\//.test(q)) { localStorage.setItem('coedit-url', q); history.replaceState(history.state, '', location.pathname); } } catch (e) {}
+    try { return localStorage.getItem('coedit-url') || CO_URL_DEFAULT; } catch (e) { return CO_URL_DEFAULT; }
+  }
+  function myExecUrl() { var m = /https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/(u\/\d+\/)?s\/[^/?#]+\/exec/.exec(document.referrer || ''); return m ? m[0] : ''; }
+  function renderSwitch() {
+    var a = $('msPersonal'), b = $('msCo');
+    a.classList.toggle('on', !IS_CO); b.classList.toggle('on', IS_CO);
+    if (IS_CO) { var me = myExecUrl(); a.href = PERSONAL_URL + (me ? '?co=' + encodeURIComponent(me) : ''); a.target = '_top'; b.removeAttribute('href'); }
+    else { var u = coUrl(); b.href = u || '#'; a.removeAttribute('href'); }
+  }
+  $('msCo').addEventListener('click', function (e) {
+    if (IS_CO) { e.preventDefault(); return; }
+    if (coUrl()) return;
+    e.preventDefault();
+    var u = window.prompt('第一次切換：請貼上共編版網址（script.google.com/macros/s/…/exec）。之後從共編版切回來時會自動記住。');
+    if (u && /^https:\/\/script\.google\.com\//.test(u.trim())) { try { localStorage.setItem('coedit-url', u.trim()); } catch (er) {} location.href = u.trim(); }
+  });
+  $('msPersonal').addEventListener('click', function (e) { if (!IS_CO) e.preventDefault(); });
   function renderProjects() {
+    renderSwitch();
     topbar('監造抽查紀錄', '室內裝修工程 · 表單版次 ' + D.version);
     var html = S.projects.map(function (p) {
       var n = 0, ng = 0;
@@ -405,15 +428,16 @@
     save(); var open = $('workPickBox').open; renderProject(); $('workPickBox').open = open;
   });
   $('btnWorkOrder').addEventListener('click', function () { var p = proj(cur.pid), sy = window.scrollY; delete p.wOrder; save(); renderProject(); window.scrollTo(0, sy); $('workPickBox').open = true; });
-  /* 長按工項卡片後拖曳排序（手機、電腦皆可） */
-  (function () {
-    var grid = $('workGrid'), timer = null, st = null, justDragged = false;
-    function cards() { return Array.prototype.slice.call(grid.querySelectorAll('[data-wid]')); }
+  /* 長按後拖曳排序（手機、電腦皆可）：工項卡片、照片共用 */
+  function makeSortable(grid, sel, onEnd, handleSel) {
+    var timer = null, st = null, justDragged = false;
+    function cards() { return Array.prototype.slice.call(grid.querySelectorAll(sel)); }
     function cancel() { clearTimeout(timer); timer = null; if (st && !st.on) st = null; }
     grid.addEventListener('pointerdown', function (e) {
-      var c = e.target.closest('[data-wid]'); if (!c || e.button > 0) return;
+      var c = e.target.closest(sel); if (!c || e.button > 0 || !grid.contains(c)) return;
+      if (handleSel && !e.target.closest(handleSel)) return;
       st = { c: c, x: e.clientX, y: e.clientY, id: e.pointerId, on: false };
-      timer = setTimeout(function () { begin(e); }, e.pointerType === 'mouse' ? 350 : 450);
+      timer = setTimeout(begin, e.pointerType === 'mouse' ? 350 : 450);
     });
     function begin() {
       if (!st) return; st.on = true;
@@ -432,8 +456,8 @@
       e.preventDefault(); place(e.clientX, e.clientY);
       st.ghost.style.visibility = 'hidden';
       var el = document.elementFromPoint(e.clientX, e.clientY); st.ghost.style.visibility = '';
-      var t = el && el.closest('#workGrid [data-wid]');
-      if (t && t !== st.c) {
+      var t = el && el.closest(sel);
+      if (t && t !== st.c && grid.contains(t)) {
         var r = t.getBoundingClientRect(), list = cards(), after = list.indexOf(t) > list.indexOf(st.c);
         var before = (e.clientY < r.top + r.height / 2 && Math.abs(e.clientY - (r.top + r.height / 2)) > r.height / 4) || (Math.abs(e.clientY - (r.top + r.height / 2)) <= r.height / 4 && e.clientX < r.left + r.width / 2);
         if (before && !after) grid.insertBefore(st.c, t); else if (!before && after) grid.insertBefore(st.c, t.nextSibling);
@@ -445,18 +469,22 @@
       if (!st) return; var s0 = st; st = null; if (!s0.on) return;
       s0.ghost.remove(); s0.c.classList.remove('drag-src'); grid.classList.remove('sorting');
       justDragged = true; setTimeout(function () { justDragged = false; }, 350);
-      var p = proj(cur.pid), shown = cards().map(function (c) { return c.dataset.wid; });
-      var all = orderedWorks(p).map(function (w) { return w.id; }), hidden = all.filter(function (id) { return shown.indexOf(id) < 0; });
-      /* 隱藏的工項維持在原本相鄰位置之後 */
-      var next = shown.slice();
-      hidden.forEach(function (id) { var i = all.indexOf(id), prev = null; for (var k = i - 1; k >= 0; k--) if (next.indexOf(all[k]) >= 0) { prev = all[k]; break; } next.splice(prev ? next.indexOf(prev) + 1 : 0, 0, id); });
-      p.wOrder = next; save(); var sy = window.scrollY; renderProject(); window.scrollTo(0, sy);
+      onEnd(cards());
     }
     grid.addEventListener('pointerup', end); grid.addEventListener('pointercancel', function () { if (st && st.on) end(); else cancel(); });
+    grid.addEventListener('dragstart', function (e) { if (e.target.closest(sel)) e.preventDefault(); });
     grid.addEventListener('touchmove', function (e) { if (st && st.on) e.preventDefault(); }, { passive: false });
-    grid.addEventListener('contextmenu', function (e) { if (e.target.closest('[data-wid]')) e.preventDefault(); });
+    grid.addEventListener('contextmenu', function (e) { if (e.target.closest(sel) && (!handleSel || e.target.closest(handleSel))) e.preventDefault(); });
     grid.addEventListener('click', function (e) { if (justDragged) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
-  })();
+  }
+  makeSortable($('workGrid'), '[data-wid]', function (list) {
+    var p = proj(cur.pid), shown = list.map(function (c) { return c.dataset.wid; });
+    var all = orderedWorks(p).map(function (w) { return w.id; }), hidden = all.filter(function (id) { return shown.indexOf(id) < 0; });
+    /* 隱藏的工項維持在原本相鄰位置之後 */
+    var next = shown.slice();
+    hidden.forEach(function (id) { var i = all.indexOf(id), prev = null; for (var k = i - 1; k >= 0; k--) if (next.indexOf(all[k]) >= 0) { prev = all[k]; break; } next.splice(prev ? next.indexOf(prev) + 1 : 0, 0, id); });
+    p.wOrder = next; save(); var sy = window.scrollY; renderProject(); window.scrollTo(0, sy);
+  });
   $('btnWorkAll').addEventListener('click', function () { var p = proj(cur.pid); delete p.works; save(); renderProject(); $('workPickBox').open = true; });
   $('workGrid').addEventListener('click', function (e) {
     if (e.target.closest('[data-dwgs]')) { go({ v: 'dwgs', pid: cur.pid }); return; }
@@ -491,6 +519,7 @@
   /* ========== 3 工項紀錄清單 ========== */
   function renderWork() {
     var p = proj(cur.pid), w = WORK[cur.wid], list = recs(p, w.id);
+    if (batchWid !== w.id) batchSel = null;
     topbar(w.name, p.info.name || '未命名工程', p.info.name || '工程');
     var blocks = w.kind === 'phased' ? w.phases.map(function (ph, pi) { return { pi: pi, title: '(' + (pi + 1) + ') ' + flowName(pi), n: countItems(ph) + ' 項' }; })
       : [{ pi: 0, title: w.kind === 'photo' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'safety' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
@@ -499,7 +528,8 @@
       var rows = items.map(function (r) {
         var s = stats(w, r);
         var meta = [r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · ') || '尚未填寫位置與日期';
-        return '<button type="button" class="rec" data-rid="' + r.id + '"><span class="rb-main"><span class="rb-title">' + esc(r.docNo) +
+        var ck = batchSel ? '<span class="bsel' + (batchSel[r.id] ? ' on' : '') + '" aria-hidden="true">' + (batchSel[r.id] ? '✓' : '') + '</span>' : '';
+        return '<button type="button" class="rec' + (batchSel && batchSel[r.id] ? ' picked' : '') + '" data-rid="' + r.id + '">' + ck + '<span class="rb-main"><span class="rb-title">' + esc(r.docNo) +
           (s.ng ? '<span class="badge-ng">' + s.ng + ' 缺失</span>' : '') + '</span><span class="rb-meta">' + esc(meta) + '</span></span>' +
           '<span class="rb-right">' + s.d + '/' + s.t + '</span><span class="chev">›</span></button>';
       }).join('');
@@ -507,6 +537,11 @@
         '<span class="pb-n"> · ' + b.n + '</span></span><button type="button" class="btn sm" data-new="' + b.pi + '">＋ 新增抽查</button></div>' +
         (rows || '<div class="pb-empty">尚無紀錄</div>') + '</section>';
     }).join('');
+    var n = list.filter(function (r) { return !r.draft; }).length, ns = batchSel ? Object.keys(batchSel).length : 0;
+    $('batchBar').hidden = !n;
+    $('batchBar').innerHTML = batchSel ? '<span class="bb-n">已選 ' + ns + ' 張</span><button type="button" class="link" data-bb="all">全選</button><button type="button" class="link" data-bb="cancel">取消</button>' +
+      '<button type="button" class="btn primary sm" data-bb="go"' + (ns ? '' : ' disabled') + '>預覽輸出</button>'
+      : '<button type="button" class="link" data-bb="start">☑ 批次輸出 PDF</button>';
     $('workRefs').textContent = w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
       : '抽查標準依據：' + w.sources.map(function (s) { return D.refs[s]; }).join('；') + '。數值請依本案契約圖說確認。';
     show('vWork');
@@ -517,7 +552,23 @@
     var nb = e.target.closest('[data-new]');
     if (nb) { var r = newRecord(p, w, +nb.dataset.new); go({ v: 'form', pid: p.id, wid: w.id, rid: r.id }); return; }
     var rb = e.target.closest('[data-rid]');
+    if (rb && batchSel) { var id = rb.dataset.rid; if (batchSel[id]) delete batchSel[id]; else batchSel[id] = 1; renderWork(); return; }
     if (rb) go({ v: 'form', pid: p.id, wid: w.id, rid: rb.dataset.rid });
+  });
+  /* 批次輸出：勾選多張後一起預覽、列印或另存成一個 PDF */
+  var batchSel = null, batchWid = null;
+  $('batchBar').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-bb]'); if (!b) return;
+    var p = proj(cur.pid), w = WORK[cur.wid], a = b.dataset.bb;
+    if (a === 'start') { batchSel = {}; batchWid = w.id; }
+    else if (a === 'cancel') batchSel = null;
+    else if (a === 'all') recs(p, w.id).forEach(function (r) { if (!r.draft) batchSel[r.id] = 1; });
+    else if (a === 'go') {
+      var ids = recs(p, w.id).filter(function (r) { return batchSel[r.id]; }).sort(function (x, y) { return (x.checkDate || '').localeCompare(y.checkDate || '') || x.phase - y.phase || x.seq - y.seq; }).map(function (r) { return r.id; });
+      if (!ids.length) return;
+      go({ v: 'preview', pid: p.id, wid: w.id, rid: ids[0], batch: ids }); return;
+    }
+    renderWork();
   });
 
   /* ========== 4 填寫 ========== */
@@ -529,6 +580,8 @@
     topbar(recTitle(w, r), m ? m.name : (I.name || '未命名工程'), m ? '材料' : w.name);
     $('autoLine').innerHTML = '自動帶入：工程名稱「' + esc(I.name || '未填') + '」' + (m ? ' · 材料「' + esc(m.name) + '」' : single ? '' : ' · 分項「' + esc(w.name) + '」') + ' · 監造人員「' + esc(I.inspector || '未填') + '」';
     if (!r.draft && hasStd(w) && snapStale(w, r)) $('autoLine').innerHTML += '<div class="draft-note std-note">本表沿用存檔當時（' + esc(r.snap.ver) + '）的抽查標準，與目前版本不同。<button type="button" class="link" id="btnSnapUpdate">更新為最新標準</button></div>';
+    var prevR = r.draft && hasStd(w) && w.kind !== 'matform' ? recs(p, w.id).filter(function (x) { return x !== r && !x.draft && x.phase === r.phase; }).sort(function (a, b) { return (b.created || 0) - (a.created || 0); })[0] : null;
+    if (prevR) $('autoLine').innerHTML += '<div class="copy-prev"><button type="button" class="link" id="btnCopyPrev" data-rid="' + prevR.id + '">↺ 帶入上一張（' + esc(prevR.docNo) + '）的判定與實測值</button></div>';
     if (r.draft) $('autoLine').innerHTML += '<div class="draft-note">尚未存檔：按下方「確認並產生 A4 表單」後才會列入抽查紀錄；直接返回則不保留。</div>';
     var photoOnly = w.kind === 'photo';
     var canMove = w.kind !== 'matform';
@@ -555,6 +608,18 @@
   });
 
   $('autoLine').addEventListener('click', function (e) {
+    var cp = e.target.closest('#btnCopyPrev');
+    if (cp) {
+      var p = proj(cur.pid), w0 = W(), r0 = R(), src = recById(p, w0.id, cp.dataset.rid); if (!src) return;
+      var doCopy = function () {
+        r0.res = JSON.parse(JSON.stringify(src.res || {})); r0.extra = JSON.parse(JSON.stringify(src.extra || {}));
+        if (!isFix(w0)) ['result', 'exec', 'method', 'methodNote'].forEach(function (k) { r0[k] = src[k] || ''; });
+        save(); renderForm();
+      };
+      if (touched(r0) && Object.keys(r0.res).some(function (k) { return r0.res[k].r || r0.res[k].note; })) ask('覆蓋目前已填的內容？', '會以「' + src.docNo + '」的判定、實測值與抽查標準取代本表目前填寫的內容；檢查位置、日期、照片不受影響。', '取消', '帶入', doCopy);
+      else doCopy();
+      return;
+    }
     if (!e.target.closest('#btnSnapUpdate')) return;
     var w = W(), r = R();
     ask('更新為最新抽查標準？', '已填的判定與實測值會依項目代碼保留；新版已刪除的項目不再顯示，新增的項目需要補填。', '取消', '更新', function () { r.snap = snapOf(w, r); save(); renderForm(); });
@@ -590,7 +655,7 @@
       '<div>' + nameHtml + stdHtml + (ref ? '<div class="item-ref">依據：' + esc(ref) + '</div>' : '') + '</div>' +
       '<div class="row"><div class="bubbles" role="radiogroup">' + b + '</div>' +
       '<div class="note"><textarea id="' + noteId + '" rows="1" placeholder="' + esc(hint || '實際抽查情形') + '" aria-label="實際抽查情形">' + esc(note) + '</textarea>' +
-      '<div class="phrases">' + (D.phrases || []).map(function (f, i) { return '<button type="button" class="chip" data-ph="' + i + '">' + esc(f.t) + '</button>'; }).join('') + '</div></div></div>' +
+      '<div class="phrases">' + phrases().map(function (f, i) { return '<button type="button" class="chip" data-ph="' + i + '" title="長按可編輯定型文">' + esc(f.t) + '</button>'; }).join('') + '</div></div></div>' +
       (extra || '') + '</div>';
   }
   var plainName = function (s) { return '<div class="item-name">' + s + '</div>'; };
@@ -619,11 +684,39 @@
     } else obj[f] = v;
     save();
   });
+  /* 定型文：可自訂（長按或按右鍵任一定型文進入編輯）；存在本機，也會一併匯出到備份檔 */
+  function phrases() { return (S.phrases && S.phrases.length) ? S.phrases : (D.phrases || []); }
+  var PH_SYM = { ok: '○', na: '／', ng: '╳' };
+  function phToText(list) { return list.map(function (f) { return f.t + (f.r ? ' ' + PH_SYM[f.r] : ''); }).join('\n'); }
+  function phFromText(txt) {
+    return txt.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean).map(function (l) {
+      var m = /\s*(○|／|\/|╳|x|X)$/.exec(l), r = '';
+      if (m) { r = { '○': 'ok', '／': 'na', '/': 'na', '╳': 'ng', x: 'ng', X: 'ng' }[m[1]]; l = l.slice(0, m.index).trim(); }
+      return { t: l, r: r };
+    }).filter(function (f) { return f.t; });
+  }
+  var phLong = false, phTimer = null;
+  function openPhEdit() { $('phText').value = phToText(phrases()); $('phDlg').hidden = false; $('phText').focus(); }
+  $('groups').addEventListener('pointerdown', function (e) {
+    if (!e.target.closest('[data-ph]')) return;
+    clearTimeout(phTimer); phTimer = setTimeout(function () { phLong = true; openPhEdit(); }, 550);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { $('groups').addEventListener(ev, function () { clearTimeout(phTimer); }); });
+  $('groups').addEventListener('contextmenu', function (e) { if (e.target.closest('[data-ph]')) { e.preventDefault(); clearTimeout(phTimer); openPhEdit(); } });
+  $('phCancel').addEventListener('click', function () { $('phDlg').hidden = true; });
+  $('phReset').addEventListener('click', function () { $('phText').value = phToText(D.phrases || []); });
+  $('phSave').addEventListener('click', function () {
+    var list = phFromText($('phText').value);
+    S.phrases = list.length ? list : null; if (!S.phrases) delete S.phrases;
+    $('phDlg').hidden = true; save();
+    if (cur.v === 'form') { var w = W(); if (w.kind === 'irregular') renderRows(); else renderGroups(); }
+  });
   /* 定型文：填入實際抽查情形，並帶入對應的判定（若尚未判定） */
   $('groups').addEventListener('click', function (e) {
     var b = e.target.closest('[data-ph]'); if (!b) return;
-    var item = b.closest('.item'), f = D.phrases[+b.dataset.ph], ta = item.querySelector('.note textarea');
-    var cur0 = ta.value.trim(), prev = D.phrases.filter(function (x) { return x.t === cur0; })[0];
+    if (phLong) { phLong = false; e.stopPropagation(); return; }
+    var item = b.closest('.item'), f = phrases()[+b.dataset.ph], ta = item.querySelector('.note textarea');
+    var cur0 = ta.value.trim(), prev = phrases().filter(function (x) { return x.t === cur0; })[0];
     if (cur0.split('；').indexOf(f.t) >= 0) return;
     ta.value = !cur0 || (prev && prev.r && f.r) ? f.t : cur0 + '；' + f.t;
     ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -815,24 +908,48 @@
   });
 
   /* ========== 預覽列印 ========== */
-  function renderPreview() {
-    var p = proj(cur.pid), w = W(), r = R();
-    topbar('列印預覽', recTitle(w, r) + ' ' + r.docNo, '返回修改');
+  /* 輸出內容：表單、照片、抽查位置圖可個別勾選（單張與批次共用） */
+  var PARTS = { form: true, photo: true, dwg: true };
+  function recPaper(p, w, r, first) {
     bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
-    $('btnMovePv').hidden = w.kind === 'matform';
+    var out = '';
+    if (w.kind === 'photo') { if (PARTS.photo || PARTS.form) out += photoPages(w, r).replace(/<\/section>$/, foot() + '</section>'); }
+    else {
+      if (PARTS.form) out += (first ? '' : '<section class="rec-sec">') + (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + (first ? '' : '</section>');
+      if (PARTS.photo) out += photoPages(w, r);
+      if (PARTS.dwg) out += recDwgPages(p, w.id, r);
+    }
+    return out;
+  }
+  function renderPreview() {
+    var p = proj(cur.pid), w = W(), r = R(), batch = (cur.batch || []).map(function (id) { return recById(p, w.id, id); }).filter(Boolean);
+    if (!batch.length) batch = [r];
+    var multi = batch.length > 1;
+    topbar('列印預覽', multi ? w.name + ' · 共 ' + batch.length + ' 張' : recTitle(w, r) + ' ' + r.docNo, multi ? w.name : '返回修改');
+    $('btnMovePv').hidden = w.kind === 'matform' || multi;
+    $('pvParts').hidden = false;
+    document.querySelectorAll('[data-part]').forEach(function (x) { x.checked = !!PARTS[x.dataset.part]; x.closest('label').hidden = w.kind === 'photo' && x.dataset.part !== 'photo'; });
     var paper = $('paper'); paper.className = 'paper';
-    paper.innerHTML = w.kind === 'photo' ? photoPages(w, r).replace(/<\/section>$/, foot() + '</section>')
-      : (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + photoPages(w, r) + recDwgPages(p, w.id, r);
+    var html = batch.map(function (x, i) { return recPaper(p, w, x, i === 0); }).join('').replace(/^<section class="rec-sec">/, '<section>');
+    paper.innerHTML = html || '<p class="pv-empty">所選的內容沒有可輸出的頁面（例如這幾張沒有照片或位置標記）。</p>';
+    if (!multi) bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
+    $('outAt').closest('.out-at').hidden = multi;
     fillImgs(paper);
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
     var dt = roc(r.checkDate || today(), '.'), mm = w.kind === 'matform' && matById(p, r.mid);
-    setDocName(w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查_' + dt : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') + '_' + dt : w.name + '_' + dt);
+    var only = PARTS.form ? '' : PARTS.photo && !PARTS.dwg ? '_照片' : PARTS.dwg && !PARTS.photo ? '_位置圖' : '_照片及位置圖';
+    if (w.kind === 'photo') only = '';
+    if (multi) {
+      var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = roc(ds[0] || today(), '.'), d2 = roc(ds[ds.length - 1] || today(), '.');
+      setDocName(w.name + '抽查_' + d1 + (d2 !== d1 ? '-' + d2 : '') + only);
+    } else setDocName((w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查_' + dt : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') + '_' + dt : w.name + '_' + dt) + only);
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
+  $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; PARTS[x.dataset.part] = x.checked; renderPreview(); });
   /* 檔名：工項＋階段＋抽查_民國日期（列印另存 PDF 時瀏覽器也會用這個名稱） */
   var docName = '';
-  function setDocName(n) { docName = String(n).replace(/[\\/:*?"<>|]+/g, '_').trim(); document.title = docName; $('pdfName').value = docName; }
+  function setDocName(n) { $('pdfMsg').textContent = ''; docName = String(n).replace(/[\\/:*?"<>|]+/g, '_').trim(); document.title = docName; $('pdfName').value = docName; }
   $('pdfName').addEventListener('input', function () { docName = $('pdfName').value.trim() || docName; document.title = docName; });
   /* 直接另存 PDF：每頁依 A4 繪製後組成 PDF 檔下載 */
   $('btnPdf').addEventListener('click', function () {
@@ -855,7 +972,7 @@
     /* 依頁拆開：表單本體一頁、照片頁與位置圖各一頁 */
     var pages = [], curPg = null;
     Array.prototype.slice.call(src.childNodes).forEach(function (n) {
-      var brk = n.nodeType === 1 && n.classList.contains('ph-page');
+      var brk = n.nodeType === 1 && (n.classList.contains('ph-page') || n.classList.contains('rec-sec'));
       if (brk || !curPg) { curPg = document.createElement('div'); curPg.className = src.className + ' pdf-page'; pages.push(curPg); }
       var c = n.cloneNode(true); if (brk) c.style.marginTop = '0'; curPg.appendChild(c);
       if (brk) curPg = null;
@@ -1194,7 +1311,7 @@
         '<td class="c">' + d(m.reviewDate) + '<br>' + esc(m.reviewResult) + '</td><td class="c">' + d(m.arrivalDate) + '</td>' +
         '<td class="c">' + d(m.inspDate) + '<br><b>' + ({ ok: '○', ng: '╳' }[m.inspResult] || '') + '</b></td><td>' + esc([m.archiveNo, m.remark].filter(Boolean).join(' ')) + '</td></tr>';
     }).join('');
-    bindOut(p, 'matOutAt');
+    bindOut(p, 'matOutAt'); $('pvParts').hidden = true; $('outAt').closest('.out-at').hidden = false;
     var paper = $('paper'); paper.className = 'paper landscape';
     paper.innerHTML = '<h3>材料設備送審管制總表</h3><p class="no">工程名稱：' + esc(I.name) + '</p>' +
       '<table class="mat"><colgroup><col style="width:3.5%"><col style="width:17%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:7%">' +
@@ -1246,13 +1363,11 @@
   var thumbCache = {};
   function renderPhotoGrid() {
     var r = R(); if (!r.photos) r.photos = [];
-    $('phCount').textContent = r.photos.length ? r.photos.length + ' 張・' + Math.ceil(r.photos.length / 6) + ' 頁' : '尚無照片';
+    $('phCount').textContent = r.photos.length ? r.photos.length + ' 張・' + Math.ceil(r.photos.length / 6) + ' 頁' + (r.photos.length > 1 ? '・長按照片可拖曳排序' : '') : '尚無照片';
     $('phGrid').innerHTML = r.photos.map(function (it, i) {
-      return '<div class="ph-card"><div class="ph-thumb"><img alt="照片 ' + (i + 1) + '" data-img="' + it.id + '"></div>' +
+      return '<div class="ph-card" data-pi="' + i + '"><div class="ph-thumb" title="長按照片可拖曳排序"><img alt="照片 ' + (i + 1) + '" data-img="' + it.id + '"></div>' +
         '<label class="f"><span>照片說明</span><textarea rows="2" data-cap="' + i + '" placeholder="例：立柱間距量測">' + esc(it.cap) + '</textarea></label>' +
         '<div class="row-tools"><span class="ph-no">第 ' + (i + 1) + ' 張</span>' +
-        (i > 0 ? '<button type="button" class="link" data-up="' + i + '">往前</button>' : '') +
-        (i < r.photos.length - 1 ? '<button type="button" class="link" data-down="' + i + '">往後</button>' : '') +
         '<button type="button" class="link" data-rm="' + i + '">刪除</button></div></div>';
     }).join('');
     fillImgs($('phGrid'));
@@ -1303,15 +1418,16 @@
       save(); renderPhotoGrid(); $('phMsg').textContent = '已加入 ' + list.length + ' 張。';
     }).catch(function (err) { save(); renderPhotoGrid(); $('phMsg').textContent = err.message || '照片加入失敗'; });
   }
+  makeSortable($('phGrid'), '.ph-card', function (list) {
+    var r = R(), old = r.photos.slice(); r.photos = list.map(function (c) { return old[+c.dataset.pi]; }); save(); renderPhotoGrid();
+  }, '.ph-thumb');
   $('phCam').addEventListener('change', function (e) { addPhotos(e.target.files); e.target.value = ''; });
   $('phPick').addEventListener('change', function (e) { addPhotos(e.target.files); e.target.value = ''; });
   $('phGrid').addEventListener('input', function (e) { var i = e.target.dataset.cap; if (i != null) { R().photos[+i].cap = e.target.value; save(); } });
   $('phGrid').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     var it = R().photos, d = b.dataset, i;
-    if (d.up != null) { i = +d.up; it.splice(i - 1, 0, it.splice(i, 1)[0]); }
-    else if (d.down != null) { i = +d.down; it.splice(i + 1, 0, it.splice(i, 1)[0]); }
-    else if (d.rm != null) { i = +d.rm; var gone = it.splice(i, 1)[0]; IDB.del(gone.id).catch(function () {}); }
+    if (d.rm != null) { i = +d.rm; var gone = it.splice(i, 1)[0]; IDB.del(gone.id).catch(function () {}); }
     else return;
     save(); renderPhotoGrid();
   });
@@ -1739,7 +1855,7 @@
   function renderDwg() {
     var p = proj(cur.pid), g = G(), li = linkInfo(p, cur.link);
     if (dwLastDid !== g.id + (cur.link || '')) {
-      dwLastDid = g.id + (cur.link || ''); dwZoom = 1; dwSel = null; dwInfoId = null; dwEditing = false; dwMode = li ? 'mark' : 'view'; dwOthers = false;
+      dwLastDid = g.id + (cur.link || ''); dwZoom = 1; dwSel = null; dwInfoId = null; dwEditing = false; dwMode = li ? 'rect' : 'view'; dwOthers = false;
       if (dwF.period === null) dwF.period = g.marks.length > 20 ? 'month' : 'all';
     }
     topbar(g.name, p.info.name || '未命名工程', li ? '返回' : '圖說');
@@ -1750,7 +1866,7 @@
     $('dwFilterBtn').hidden = !!li; $('dwFilter').hidden = !!li || !dwFOpen; $('dwFilterBtn').setAttribute('aria-expanded', String(dwFOpen && !li));
     if (!li && dwFOpen) renderFilter();
     $('dwTip').textContent = li ? '在圖上拖曳框出「' + li.long + '」的抽查位置，畫好的色塊會自動對應這張抽查表。勾選「顯示其他紀錄」可淡灰顯示其他抽查單的位置作參考。' :
-      '點色塊可看該抽查單摘要；切到「畫色塊」可新增。對應抽查紀錄的色塊依結果自動上色：藍＝合格、紅＝有缺失、綠＝已改善、灰＝尚未判定。';
+      '點標記可看該抽查單摘要；選 ▭ 方框、◯ 圓圈或 ↗ 箭頭後在圖上拖曳新增，雙指或 Ctrl＋滾輪可縮放。對應抽查紀錄的色塊依結果自動上色：藍＝合格、紅＝有缺失、綠＝已改善、灰＝尚未判定。';
     show('vDwg');
     var img = $('dwImg');
     if (img.dataset.id !== g.img) { img.removeAttribute('src'); img.dataset.id = g.img; loadImg(g.img).then(function (u) { if (u && img.dataset.id === g.img) img.src = u; }); }
@@ -1759,19 +1875,30 @@
   function sizeDwg() {
     var g = G(), st = $('dwStage'), cw = Math.max(200, st.clientWidth) * dwZoom;
     $('dwCanvas').style.width = cw + 'px'; $('dwCanvas').style.height = (cw * g.h / g.w) + 'px';
-    st.classList.toggle('marking', dwMode === 'mark');
+    st.classList.toggle('marking', dwMode !== 'view');
   }
   function rgba(hex, al) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + al + ')'; }
   function markStyle(m, col) { col = col || colorOf(m); return 'left:' + (m.x * 100) + '%;top:' + (m.y * 100) + '%;width:' + (m.w * 100) + '%;height:' + (m.h * 100) + '%;--c:' + col + ';--bg:' + rgba(col, 0.32); }
+  /* 標記形狀：方框（rect）、圓圈（ellipse）、箭頭（arrow：起點 x,y，終點 x+w,y+h） */
+  function markHtml(m, o) {
+    o = o || {}; var col = o.col || colorOf(m), ratio = o.ratio || 1, tag = o.tag != null ? '<span class="dw-tag"' + '%TAGSTYLE%' + '>' + o.tag + '</span>' : '';
+    var attr = (o.id ? ' data-mk="' + m.id + '"' : ''), handle = o.sel ? '<i class="dw-h"></i>' : '';
+    var cls = 'dw-mark' + (o.cls ? ' ' + o.cls : '') + (o.sel ? ' sel' : '');
+    if (m.s === 'arrow') {
+      var dx = m.w, dy = m.h * ratio, len = Math.sqrt(dx * dx + dy * dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      return '<div class="' + cls + ' dw-arrow"' + attr + ' style="left:' + (m.x * 100) + '%;top:' + (m.y * 100) + '%;width:' + (len * 100) + '%;transform:rotate(' + ang.toFixed(2) + 'deg);--c:' + col + '">' +
+        tag.replace('%TAGSTYLE%', ' style="transform:rotate(' + (-ang).toFixed(2) + 'deg)"') + handle + '</div>';
+    }
+    return '<div class="' + cls + (m.s === 'ellipse' ? ' dw-ell' : '') + '"' + attr + ' style="' + markStyle(m, col) + '">' + tag.replace('%TAGSTYLE%', '') + handle + '</div>';
+  }
+  function gRatio() { var g = G(); return g ? g.h / g.w : 1; }
   function drawMarks() {
     var p = proj(cur.pid), g = G(), shown = 0;
     $('dwMarks').innerHTML = g.marks.map(function (m, i) {
       var v = markVis(p, m); if (v === 'hide' && m.id !== dwSel) return '';
-      if (v === 'ghost') return '<div class="dw-mark ghost" style="' + markStyle(m, '#9a9a9a') + '"></div>';
+      if (v === 'ghost') return markHtml(m, { col: '#9a9a9a', cls: 'ghost', ratio: g.h / g.w });
       shown++;
-      var t = markText(p, m);
-      return '<div class="dw-mark' + (m.id === dwSel ? ' sel' : '') + '" data-mk="' + m.id + '" style="' + markStyle(m) + '">' +
-        '<span class="dw-tag">' + (i + 1) + (t ? ' ' + esc(t) : '') + '</span>' + (m.id === dwSel ? '<i class="dw-h"></i>' : '') + '</div>';
+      return oneMark(p, g, m, i);
     }).join('');
     $('dwCount').textContent = (shown < g.marks.length ? '顯示 ' + shown + ' / ' : '') + g.marks.length + ' 個';
     $('dwFilterN').textContent = filterOn() ? '（' + shown + '/' + g.marks.length + '）' : '';
@@ -1780,10 +1907,11 @@
       if (markVis(p, m) !== 'show') return '';
       var li = linkInfo(p, m.rid), st = li ? recState(li.w, li.r) : 'none';
       return '<li class="dl-item"><button type="button" class="dl-row" data-pick="' + m.id + '"><span class="dw-dot" style="--c:' + colorOf(m) + '">' + (i + 1) + '</span>' +
-        '<span class="dl-txt"><b>' + esc(m.t || (li ? li.short : '未命名色塊')) + '</b><small>' + esc(li ? li.long + (li.r.checkDate ? ' · ' + roc(li.r.checkDate, '.') : '') + (li.r.location ? ' · ' + li.r.location : '') : '未對應抽查紀錄') + '</small></span>' +
+        '<span class="dl-txt"><b>' + esc(m.t || (li ? li.short : '未命名標記')) + '</b><small>' + esc(li ? li.long + (li.r.checkDate ? ' · ' + roc(li.r.checkDate, '.') : '') + (li.r.location ? ' · ' + li.r.location : '') : '未對應抽查紀錄') + '</small></span>' +
         (st === 'ng' ? '<span class="dl-ng">缺失</span>' : '') + '<span class="dl-chev">›</span></button></li>';
     }).join('') || '<li class="dl-item"><span class="dl-row muted">' + (g.marks.length ? '目前條件下沒有色塊。' : '尚無色塊。') + '</span></li>';
   }
+  function oneMark(p, g, m, i) { var t = markText(p, m); return markHtml(m, { id: true, sel: m.id === dwSel, ratio: g.h / g.w, tag: (i + 1) + (t ? ' ' + esc(t) : '') }); }
   function curMark() { var g = G(); return g && g.marks.filter(function (m) { return m.id === dwSel; })[0]; }
   function recOptions(p, sel) {
     var html = '<option value="">（不對應）</option>';
@@ -1831,6 +1959,7 @@
     if (scroll) { var el = document.querySelector('[data-mk="' + id + '"]'); if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }
   }
   document.querySelectorAll('input[name="dwMode"]').forEach(function (x) { x.addEventListener('change', function () { dwMode = x.value; sizeDwg(); }); });
+  /* 縮放：按鈕、Ctrl＋滾輪／觸控板（以游標為中心）、手機雙指縮放 */
   $('dwColors').addEventListener('click', function (e) {
     var b = e.target.closest('[data-dwc]'); if (!b) return; dwColor = +b.dataset.dwc; $('dwColors').innerHTML = colorsHtml(dwColor, 'data-dwc');
   });
@@ -1856,27 +1985,50 @@
   $('dwOpenRec').addEventListener('click', function () { var m = curMark(), a = m && m.rid.split('|'); if (a) go({ v: 'form', pid: cur.pid, wid: a[0], rid: a[1] }); });
   $('dwMarkList').addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) selectMark(b.dataset.pick, true); });
   $('dwName').addEventListener('input', function () { var g = G(); g.name = $('dwName').value || '未命名圖說'; save(); $('tbTitle').textContent = g.name; });
-  function zoomTo(z) {
-    var st = $('dwStage'), cx = (st.scrollLeft + st.clientWidth / 2) / st.scrollWidth, cy = (st.scrollTop + st.clientHeight / 2) / st.scrollHeight;
-    dwZoom = Math.max(1, Math.min(8, z)); sizeDwg();
-    st.scrollLeft = cx * st.scrollWidth - st.clientWidth / 2; st.scrollTop = cy * st.scrollHeight - st.clientHeight / 2;
+  function zoomAt(z, ox, oy) {   // ox, oy：以舞台左上角為原點的固定點
+    var st = $('dwStage'), cv = $('dwCanvas'), w0 = cv.offsetWidth, h0 = cv.offsetHeight;
+    var fx = (st.scrollLeft + ox - cv.offsetLeft) / w0, fy = (st.scrollTop + oy - cv.offsetTop) / h0;
+    dwZoom = Math.max(1, Math.min(10, z)); sizeDwg();
+    st.scrollLeft = fx * cv.offsetWidth + cv.offsetLeft - ox; st.scrollTop = fy * cv.offsetHeight + cv.offsetTop - oy;
   }
+  function zoomTo(z) { var st = $('dwStage'); zoomAt(z, st.clientWidth / 2, st.clientHeight / 2); }
   $('dwZoomIn').addEventListener('click', function () { zoomTo(dwZoom * 1.5); });
   $('dwZoomOut').addEventListener('click', function () { zoomTo(dwZoom / 1.5); });
   $('dwZoomFit').addEventListener('click', function () { zoomTo(1); });
-  $('dwStage').addEventListener('wheel', function (e) { if (!e.ctrlKey) return; e.preventDefault(); zoomTo(dwZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+  $('dwStage').addEventListener('wheel', function (e) {
+    if (!e.ctrlKey && !e.metaKey) return; e.preventDefault();
+    var b = $('dwStage').getBoundingClientRect(); zoomAt(dwZoom * Math.exp(-e.deltaY * 0.0025), e.clientX - b.left, e.clientY - b.top);
+  }, { passive: false });
+  var pinch = null;
+  function tdist(t) { return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }
+  $('dwStage').addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 2) return;
+    if (drag) { if (drag.el) drag.el.remove(); if (drag.t === 'move' || drag.t === 'size') drawMarks(); drag = null; }
+    var b = $('dwStage').getBoundingClientRect();
+    pinch = { d: tdist(e.touches), z: dwZoom, b: b, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2 - b.left, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 - b.top };
+    var st = $('dwStage'), cv = $('dwCanvas');
+    pinch.fx = (st.scrollLeft + pinch.cx - cv.offsetLeft) / cv.offsetWidth; pinch.fy = (st.scrollTop + pinch.cy - cv.offsetTop) / cv.offsetHeight;
+    e.preventDefault();
+  }, { passive: false });
+  $('dwStage').addEventListener('touchmove', function (e) {
+    if (!pinch || e.touches.length !== 2) return; e.preventDefault();
+    var st = $('dwStage'), cv = $('dwCanvas'), mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - pinch.b.left, my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - pinch.b.top;
+    dwZoom = Math.max(1, Math.min(10, pinch.z * tdist(e.touches) / pinch.d)); sizeDwg();
+    st.scrollLeft = pinch.fx * cv.offsetWidth + cv.offsetLeft - mx; st.scrollTop = pinch.fy * cv.offsetHeight + cv.offsetTop - my;
+  }, { passive: false });
+  $('dwStage').addEventListener('touchend', function (e) { if (e.touches.length < 2) pinch = null; });
   window.addEventListener('resize', function () { if (cur.v === 'dwg' && G()) sizeDwg(); });
 
   /* 拖曳：畫新色塊、移動、調整大小 */
   var drag = null;
   function frac(e) { var b = $('dwCanvas').getBoundingClientRect(); return { x: Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)), y: Math.max(0, Math.min(1, (e.clientY - b.top) / b.height)) }; }
   $('dwCanvas').addEventListener('pointerdown', function (e) {
-    if (e.button > 0) return;
+    if (e.button > 0 || pinch || !e.isPrimary) return;
     var pt = frac(e), mk = e.target.closest('[data-mk]'), m;
-    if (e.target.classList.contains('dw-h') && (m = curMark())) drag = { t: 'size', m: m, p0: pt, o: { w: m.w, h: m.h } };
+    if (e.target.classList.contains('dw-h') && (m = curMark())) drag = { t: 'size', m: m, p0: pt, o: { w: m.w, h: m.h, x: m.x, y: m.y } };
     else if (mk && mk.dataset.mk === dwSel && (m = curMark())) drag = { t: 'move', m: m, p0: pt, o: { x: m.x, y: m.y } };
-    else if (mk && dwMode !== 'mark') { selectMark(mk.dataset.mk); return; }
-    else if (dwMode === 'mark') { drag = { t: 'new', p0: pt, el: document.createElement('div') }; drag.el.className = 'dw-mark sel'; drag.el.style.cssText = markStyle({ x: pt.x, y: pt.y, w: 0, h: 0, c: dwColor, rid: cur.link || '' }); $('dwMarks').appendChild(drag.el); }
+    else if (mk && dwMode === 'view') { selectMark(mk.dataset.mk); return; }
+    else if (dwMode !== 'view') { drag = { t: 'new', s: dwMode, p0: pt, el: document.createElement('div') }; drag.el.className = 'dw-temp'; $('dwMarks').appendChild(drag.el); }
     else { drag = { t: 'tap', p0: pt }; return; }
     e.preventDefault(); $('dwCanvas').setPointerCapture(e.pointerId);
   });
@@ -1884,21 +2036,28 @@
     if (!drag || drag.t === 'tap') return;
     var pt = frac(e), dx = pt.x - drag.p0.x, dy = pt.y - drag.p0.y, m = drag.m, el;
     if (drag.t === 'new') {
-      drag.r = { x: Math.min(pt.x, drag.p0.x), y: Math.min(pt.y, drag.p0.y), w: Math.abs(dx), h: Math.abs(dy), c: dwColor, rid: cur.link || '' };
-      drag.el.style.cssText = markStyle(drag.r); return;
+      drag.r = drag.s === 'arrow' ? { s: 'arrow', x: drag.p0.x, y: drag.p0.y, w: dx, h: dy, c: dwColor, rid: cur.link || '' }
+        : { s: drag.s, x: Math.min(pt.x, drag.p0.x), y: Math.min(pt.y, drag.p0.y), w: Math.abs(dx), h: Math.abs(dy), c: dwColor, rid: cur.link || '' };
+      drag.el.innerHTML = markHtml(drag.r, { sel: false, ratio: gRatio() }); return;
     }
-    if (drag.t === 'move') { m.x = Math.max(0, Math.min(1 - m.w, drag.o.x + dx)); m.y = Math.max(0, Math.min(1 - m.h, drag.o.y + dy)); }
+    var arrow = m.s === 'arrow';
+    if (drag.t === 'move') {
+      m.x = Math.max(Math.max(0, -m.w), Math.min(1 - Math.max(0, m.w), drag.o.x + dx)); m.y = Math.max(Math.max(0, -m.h), Math.min(1 - Math.max(0, m.h), drag.o.y + dy));
+    } else if (arrow) { m.w = Math.max(-m.x, Math.min(1 - m.x, drag.o.w + dx)); m.h = Math.max(-m.y, Math.min(1 - m.y, drag.o.h + dy)); }
     else { m.w = Math.max(0.005, Math.min(1 - m.x, drag.o.w + dx)); m.h = Math.max(0.005, Math.min(1 - m.y, drag.o.h + dy)); }
     drag.moved = true;
-    if ((el = document.querySelector('[data-mk="' + m.id + '"]'))) el.style.cssText = markStyle(m);
+    if ((el = document.querySelector('#dwMarks [data-mk="' + m.id + '"]'))) { var g0 = G(); el.outerHTML = oneMark(proj(cur.pid), g0, m, g0.marks.indexOf(m)); }
   });
   function endDrag(e) {
     if (!drag) return; var d = drag; drag = null;
     if (d.t === 'tap') { var pt = frac(e); if (Math.abs(pt.x - d.p0.x) + Math.abs(pt.y - d.p0.y) < 0.01 && dwSel) selectMark(null); return; }
     if (d.t === 'new') {
       var g = G(), r = d.r;
-      if (!r || (r.w < 0.006 && r.h < 0.006)) { d.el.remove(); return; }
-      var nm = { id: uid(), x: r.x, y: r.y, w: Math.max(r.w, 0.006), h: Math.max(r.h, 0.006), c: dwColor, t: '', rid: cur.link || '', created: Date.now() };
+      if (!r || (Math.abs(r.w) < 0.006 && Math.abs(r.h) < 0.006)) { d.el.remove(); return; }
+      var nm = r.s === 'arrow' ? { id: uid(), s: 'arrow', x: r.x, y: r.y, w: r.w, h: r.h, c: dwColor, t: '', rid: cur.link || '', created: Date.now() }
+        : { id: uid(), s: r.s === 'ellipse' ? 'ellipse' : undefined, x: r.x, y: r.y, w: Math.max(r.w, 0.006), h: Math.max(r.h, 0.006), c: dwColor, t: '', rid: cur.link || '', created: Date.now() };
+      if (!nm.s) delete nm.s;
+      d.el.remove();
       g.marks.push(nm); save(); dwSel = nm.id; dwEditing = true; drawMarks(); dwPanel(); return;
     }
     if (d.moved) save();
@@ -1916,7 +2075,10 @@
         var x = c.getContext('2d'); x.translate(c.width, 0); x.rotate(Math.PI / 2); x.drawImage(img, 0, 0);
         var data = canvasJpeg(c), id = 'dw_' + uid(); thumbCache[id] = data;
         IDB.put(id, data).then(function () {
-          g.marks.forEach(function (m) { var nx = 1 - (m.y + m.h), ny = m.x, w = m.w; m.x = nx; m.y = ny; m.w = m.h; m.h = w; });
+          g.marks.forEach(function (m) {
+            if (m.s === 'arrow') { var ax = 1 - m.y, ay = m.x, aw = -m.h, ah = m.w; m.x = ax; m.y = ay; m.w = aw; m.h = ah; return; }
+            var nx = 1 - (m.y + m.h), ny = m.x, w = m.w; m.x = nx; m.y = ny; m.w = m.h; m.h = w;
+          });
           g.img = id; var t = g.w; g.w = g.h; g.h = t; save();
           IDB.del(old).catch(function () {}); delete thumbCache[old];
           if (window.Cloud) window.Cloud.uploadPhoto(id, data);
@@ -1940,7 +2102,7 @@
     var aw = land ? 277 : 186, ah = Math.max(70, (land ? 190 : 270) - reserve);
     var fw = Math.min(aw, ah * g.w / g.h), fh = fw * g.h / g.w;
     return '<div class="dw-fig" style="width:' + fw.toFixed(1) + 'mm;height:' + fh.toFixed(1) + 'mm"><img alt="" data-img="' + g.img + '">' +
-      marks.map(function (m) { return '<div class="dw-mark" style="' + markStyle(m) + '"><span class="dw-tag">' + numOf(m) + '</span></div>'; }).join('') + '</div>';
+      marks.map(function (m) { return markHtml(m, { ratio: g.h / g.w, tag: numOf(m) }); }).join('') + '</div>';
   }
   function stKey() {
     return '<p class="dw-stkey">' + ['ok', 'ng', 'fixed', 'todo'].map(function (k) { return '<span><i class="dw-key" style="--c:' + ST_COLOR[k] + ';--bg:' + rgba(ST_COLOR[k], 0.4) + '"></i>' + ST_NAME[k] + '</span>'; }).join('') + '</p>';
@@ -1957,7 +2119,7 @@
     var p = proj(cur.pid), g = G(), land = g.w > g.h, num = function (m) { return g.marks.indexOf(m) + 1; };
     var ms = g.marks.filter(function (m) { return passFilter(p, m); }), fd = filterDesc();
     topbar('列印預覽', g.name, '圖說');
-    bindOut(g, 'outAt'); $('btnMovePv').hidden = true;
+    bindOut(g, 'outAt'); $('btnMovePv').hidden = true; $('pvParts').hidden = true; $('outAt').closest('.out-at').hidden = false;
     var paper = $('paper'); paper.className = 'paper dw-paper' + (land ? ' landscape' : '');
     var rows = Math.min(ms.length, 30);
     paper.innerHTML = '<h3 class="dw-h3">抽查位置圖</h3><p class="no">工程名稱：' + esc(p.info.name) + '　圖說：' + esc(g.name) + (fd ? '　篩選：' + esc(fd) : '') + '</p>' +

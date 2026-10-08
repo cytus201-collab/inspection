@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
 
@@ -27,6 +27,7 @@
 <main id="vProjects" class="view wrap" hidden>
   <div class="head-row">
     <h2 class="h">工程清單</h2>
+    <nav class="mode-switch" aria-label="切換版本"><a id="msPersonal" title="個人版：資料只存在這台裝置">個人</a><a id="msCo" title="共編版：資料存在雲端，可與同事共用">共編</a></nav>
     <button type="button" class="btn primary sm" id="btnNewProject">＋ 新增工程</button>
   </div>
   <div id="projectList" class="list"></div>
@@ -101,6 +102,7 @@
 
 <!-- ===== 3 工項：紀錄清單 ===== -->
 <main id="vWork" class="view wrap" hidden>
+  <div class="batch-bar" id="batchBar" hidden></div>
   <div id="phaseBlocks" class="list"></div>
   <p class="muted" id="workRefs"></p>
 </main>
@@ -307,6 +309,7 @@
       <input type="datetime-local" id="outAt" step="60">
       <button type="button" class="link" id="btnOutNow">改為現在</button>
     </div>
+    <div class="pv-parts" id="pvParts"><span>輸出</span><label><input type="checkbox" data-part="form" checked>表單</label><label><input type="checkbox" data-part="photo" checked>照片</label><label><input type="checkbox" data-part="dwg" checked>位置圖</label></div>
     <button type="button" class="btn ghost" id="btnMovePv">⇄ 移到／複製到其他工程</button>
     <button type="button" class="btn ghost" id="btnPrint">🖨 列印</button>
     <button type="button" class="btn primary" id="btnPdf">⬇ 另存 PDF</button>
@@ -350,7 +353,9 @@
   <div class="dw-bar noprint">
     <div class="seg dw-mode">
       <label class="pill"><input type="radio" name="dwMode" value="view" checked><span>✋ 瀏覽</span></label>
-      <label class="pill"><input type="radio" name="dwMode" value="mark"><span>▭ 畫色塊</span></label>
+      <label class="pill" title="方框"><input type="radio" name="dwMode" value="rect"><span>▭</span></label>
+      <label class="pill" title="圓圈"><input type="radio" name="dwMode" value="ellipse"><span>◯</span></label>
+      <label class="pill" title="箭頭"><input type="radio" name="dwMode" value="arrow"><span>↗</span></label>
     </div>
     <div class="dw-colors" id="dwColors"></div>
     <label class="chk dw-others" id="dwOthersBox"><input type="checkbox" id="dwOthers"><span>顯示其他紀錄</span></label>
@@ -380,7 +385,7 @@
     <section class="card">
       <div class="head-row"><h2 class="h small">色塊清單</h2><span class="tag" id="dwCount"></span></div>
       <ul class="day-list" id="dwMarkList"></ul>
-      <p class="muted" id="dwTip">切到「畫色塊」，在圖上拖曳框出抽查位置；點色塊可改文字、顏色或對應抽查紀錄，拖曳可移動，右下角可調整大小。</p>
+      <p class="muted" id="dwTip">選 ▭ 方框、◯ 圓圈或 ↗ 箭頭後在圖上拖曳新增；點標記可改文字、顏色或對應抽查紀錄，選取後可拖曳移動、拉圓點調整大小。</p>
     </section>
     <div class="dw-info" id="dwInfo" hidden></div>
     <section class="card quiet">
@@ -415,6 +420,17 @@
     </div>
   </div>
 </div>
+<div class="dialog" id="phDlg" hidden>
+  <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="phTitle">
+    <h2 id="phTitle">編輯定型文</h2>
+    <p class="muted">每行一個。結尾加「○」或「／」，點選時會一併帶入判定。</p>
+    <textarea id="phText" rows="9" class="ph-text"></textarea>
+    <div class="btn-row between">
+      <button type="button" class="link" id="phReset">恢復預設</button>
+      <div class="btn-row"><button type="button" class="btn ghost" id="phCancel">取消</button><button type="button" class="btn primary" id="phSave">儲存</button></div>
+    </div>
+  </div>
+</div>
 <div class="dialog" id="dlg" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
     <h2 id="dlgTitle"></h2>
@@ -426,9 +442,9 @@
   </div>
 </div>
 
-<script src="data.js?v=29"></script>
-<script src="mat-parse.js?v=29"></script>
-<script src="cloud.js?v=29"></script>
-<script src="app.js?v=29"></script>
+<script src="data.js?v=30"></script>
+<script src="mat-parse.js?v=30"></script>
+<script src="cloud.js?v=30"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>
