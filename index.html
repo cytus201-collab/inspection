@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 </head>
 <body>
 
@@ -58,6 +58,7 @@
       <h2 class="h small" id="calTitle"></h2>
       <button type="button" class="btn ghost sm" id="calNext" aria-label="下個月">›</button>
       <button type="button" class="btn ghost sm" id="calToday">今天</button>
+      <button type="button" class="btn ghost sm" id="btnSum" title="產出截至某日的材料、施工抽查與缺失改善總表">📋 抽查總表</button>
       <span class="cal-legend"><i class="ev ev-rec"></i>已抽查 <i class="ev ev-plan"></i>預定 <i class="ev ev-mat"></i>材料進場</span>
     </div>
     <div class="cal-grid" id="calGrid" role="grid"></div>
@@ -310,6 +311,7 @@
       <input type="datetime-local" id="outAt" step="60">
       <button type="button" class="link" id="btnOutNow">改為現在</button>
     </div>
+    <div class="sum-bar" id="sumBar" hidden><label>本期起 <input type="date" id="sumFrom"></label><label>截至 <input type="date" id="sumTo"></label></div>
     <div class="pv-parts" id="pvParts"><span>輸出</span><label><input type="checkbox" data-part="form" checked>表單</label><label><input type="checkbox" data-part="photo" checked>照片</label><label><input type="checkbox" data-part="dwg" checked>位置圖</label></div>
     <button type="button" class="btn ghost" id="btnMovePv">⇄ 移到／複製到其他工程</button>
     <button type="button" class="btn ghost" id="btnPrint">🖨 列印</button>
@@ -455,9 +457,9 @@
   </div>
 </div>
 
-<script src="data.js?v=31"></script>
-<script src="mat-parse.js?v=31"></script>
-<script src="cloud.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="data.js?v=32"></script>
+<script src="mat-parse.js?v=32"></script>
+<script src="cloud.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

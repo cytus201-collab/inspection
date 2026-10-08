@@ -264,9 +264,10 @@
     else if (cur.v === 'matItem' && !matById(p, cur.mid)) cur = { v: 'materials', pid: cur.pid };
     else if (cur.v === 'matImport' && !pendingImport) cur = { v: 'materials', pid: cur.pid };
     else if (/^(dwg|dwgPrint)$/.test(cur.v) && !dwgById(p, cur.did)) cur = { v: 'dwgs', pid: cur.pid };
+    $('sumBar').hidden = true;
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
-      materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint,
+      materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
       dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint
     })[cur.v]();
   }
@@ -987,13 +988,23 @@
     var first = true;
     return pages.reduce(function (pr, pg) {
       return pr.then(function () {
+        /* 可切頁的位置：表格每一列、標題段落的下緣（避免一列被切成兩半） */
+        var top0 = pg.getBoundingClientRect().top, cssW = pg.getBoundingClientRect().width, cuts = [];
+        Array.prototype.forEach.call(pg.querySelectorAll('tr, .sum-paper > *'), function (el) { cuts.push(el.getBoundingClientRect().bottom - top0); });
         return window.html2canvas(pg, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false }).then(function (cv) {
-          var pxPerMm = cv.width / Wmm, pageH = Math.floor(Hmm * pxPerMm);
-          for (var y = 0; y < cv.height - 2; y += pageH) {
-            var h = Math.min(pageH, cv.height - y), part = document.createElement('canvas');
+          var pxPerMm = cv.width / Wmm, pageH = Math.floor(Hmm * pxPerMm), padT = Math.round(my * pxPerMm), k = cv.width / cssW;
+          var bk = cuts.map(function (c) { return Math.round(c * k); }).sort(function (a, b) { return a - b; });
+          for (var y = 0, n = 0; y < cv.height - 2; n++) {
+            var off = n ? padT : 0, room = pageH - off, h = Math.min(room, cv.height - y);
+            if (y + h < cv.height - 2) {
+              var best = 0; bk.forEach(function (b) { if (b > y + room * 0.5 && b <= y + room) best = b; });
+              if (best) h = best - y + 1;
+            }
+            var part = document.createElement('canvas');
             part.width = cv.width; part.height = h; part.getContext('2d').drawImage(cv, 0, y, cv.width, h, 0, 0, cv.width, h);
             if (!first) pdf.addPage('a4', land ? 'landscape' : 'portrait'); first = false;
-            pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, Wmm, h / pxPerMm);
+            pdf.addImage(part.toDataURL('image/jpeg', 0.92), 'JPEG', 0, off / pxPerMm, Wmm, h / pxPerMm);
+            y += h;
           }
         });
       });
@@ -1315,7 +1326,7 @@
         '<td class="c">' + d(m.reviewDate) + '<br>' + esc(m.reviewResult) + '</td><td class="c">' + d(m.arrivalDate) + '</td>' +
         '<td class="c">' + d(m.inspDate) + '<br><b>' + ({ ok: '○', ng: '╳' }[m.inspResult] || '') + '</b></td><td>' + esc([m.archiveNo, m.remark].filter(Boolean).join(' ')) + '</td></tr>';
     }).join('');
-    bindOut(p, 'matOutAt'); $('pvParts').hidden = true; $('outAt').closest('.out-at').hidden = false;
+    bindOut(p, 'matOutAt'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
     var paper = $('paper'); paper.className = 'paper landscape';
     paper.innerHTML = '<h3>材料設備送審管制總表</h3><p class="no">工程名稱：' + esc(I.name) + '</p>' +
       '<table class="mat"><colgroup><col style="width:3.5%"><col style="width:17%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:7%">' +
@@ -1327,6 +1338,81 @@
     $('printHint').textContent = '紙張選 A4 橫向、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
     setDocName('材料設備送審管制總表_' + (I.name || '') + '_' + roc(today(), '.'));
+  }
+
+  /* ========== 抽查總表：截至某日的材料進場抽驗、分項施工抽查、缺失改善追蹤（格式依月進度會議報告） ========== */
+  var sumOut = {};
+  $('btnSum').addEventListener('click', function () {
+    var to = today(); go({ v: 'sumPrint', pid: cur.pid, to: to, from: sumFromDef(to) });
+  });
+  function sumFromDef(to) { var d = new Date(to + 'T00:00:00'); d.setMonth(d.getMonth() - 1); d.setDate(d.getDate() + 1); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+  function sumDate(e) {
+    var v = e.target.value; if (!v) return;
+    cur[e.target.id === 'sumFrom' ? 'from' : 'to'] = v;
+    if (cur.from > cur.to) { if (e.target.id === 'sumTo') cur.from = sumFromDef(cur.to); else cur.to = cur.from; }
+    go(cur, true);
+  }
+  $('sumFrom').addEventListener('change', sumDate); $('sumTo').addEventListener('change', sumDate);
+  /* 整理本工程所有已確認的抽查（不含草稿與照片紀錄） */
+  function sumData(p, to) {
+    var cons = [], mats = [], defs = [], usedMat = {};
+    Object.keys(p.recs || {}).forEach(function (wid) {
+      var w = WORK[wid]; if (!w || w.kind === 'photo') return;
+      (p.recs[wid] || []).forEach(function (r) {
+        if (r.draft || !r.checkDate || r.checkDate > to) return;
+        var m = w.kind === 'matform' && matById(p, r.mid), st = recState(w, r), single = !isFix(w);
+        if (w.kind === 'matform') usedMat[r.mid] = 1;
+        var row = { date: r.checkDate, no: r.docNo || '', name: w.kind === 'matform' ? (m ? m.name : '材料') + '進場抽查' : w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name, loc: r.location || '', st: st };
+        (w.kind === 'matform' ? mats : cons).push(row);
+        if (st === 'ng' || st === 'fixed') {
+          var items = [];
+          if (w.kind === 'irregular') (r.rows || []).forEach(function (x) { if (x.r === 'ng') items.push(x.name + (x.note ? '（' + x.note + '）' : '')); });
+          else effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (it.c.r === 'ng') items.push(it.name + (it.c.note ? '（' + it.c.note + '）' : '')); }); });
+          if (!items.length && r.remark) items.push(r.remark);
+          var fd = single ? (r.reTime || '').slice(0, 10) : r.fixDate;
+          defs.push({ date: r.checkDate, no: row.no, name: row.name, loc: row.loc, txt: items.join('；'), st: st, fixed: st === 'fixed' ? '已改善' + (fd ? ' ' + roc(fd, '/') : '') : (!single && r.fix === 'track' ? '追蹤改善中' : '未改善') });
+        }
+      });
+    });
+    /* 只在材料清單勾選抽查結果、沒有抽查單的材料 */
+    (p.mats || []).forEach(function (m) {
+      if (usedMat[m.id] || !m.inspDate || !m.inspResult || m.inspDate > to) return;
+      mats.push({ date: m.inspDate, no: m.no || '', name: (m.name || '材料') + '進場抽查', loc: '', st: m.inspResult === 'ng' ? 'ng' : 'ok' });
+      if (m.inspResult === 'ng') defs.push({ date: m.inspDate, no: m.no || '', name: (m.name || '材料') + '進場抽查', loc: '', txt: m.inspNote || '', st: 'ng', fixed: '未改善' });
+    });
+    var by = function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.no < b.no ? -1 : a.no > b.no ? 1 : 0; };
+    return { cons: cons.sort(by), mats: mats.sort(by), defs: defs.sort(by) };
+  }
+  function renderSumPrint() {
+    var p = proj(cur.pid), I = p.info, to = cur.to || today(), from = cur.from || sumFromDef(to), d = sumData(p, to);
+    topbar('列印預覽', '抽查總表', I.name);
+    $('sumFrom').value = from; $('sumTo').value = to; $('sumBar').hidden = false;
+    var RES = { ok: 'OK', ng: '<b class="sum-ng">有缺失</b>', fixed: '缺失已改善', todo: '未完成' };
+    var cnt = function (list) { var pre = list.filter(function (x) { return x.date < from; }).length; return { pre: pre, now: list.length - pre, all: list.length }; };
+    var head = function (c) { return '<p class="sum-cnt">前期累計：<b>' + c.pre + '</b> 次　　本期：<b>' + c.now + '</b> 次　　本期累計：<b>' + c.all + '</b> 次'; };
+    var tbl = function (list, cols, cell) {
+      if (!list.length) return '<p class="sum-none">截至本日尚無紀錄。</p>';
+      return '<table class="sum"><colgroup>' + cols.map(function (c) { return '<col style="width:' + c[1] + '">'; }).join('') + '</colgroup><thead><tr>' +
+        cols.map(function (c) { return '<th>' + c[0] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        list.map(function (x, i) { return '<tr' + (x.date < from ? ' class="prev"' : '') + '><td class="c">' + (i + 1) + '</td>' + cell(x) + '</tr>'; }).join('') + '</tbody></table>';
+    };
+    var COLS = [['項次', '7%'], ['項目名稱', '37%'], ['位置', '20%'], ['抽驗日期', '16%'], ['檢查結果', '20%']];
+    var basic = function (x) { return '<td>' + esc(x.name) + '</td><td class="c">' + esc(x.loc) + '</td><td class="c">' + roc(x.date, '/') + '</td><td class="c">' + RES[x.st] + '</td>'; };
+    var cm = cnt(d.mats), cc = cnt(d.cons), cd = cnt(d.defs), fixedN = d.defs.filter(function (x) { return x.st === 'fixed'; }).length;
+    var paper = $('paper'); paper.className = 'paper sum-paper';
+    paper.innerHTML = '<div class="sum-title"><h3>「' + esc(I.name || '') + '」</h3><p>工程抽查總表</p>' + (I.supervisor ? '<p class="sum-sup">' + esc(I.supervisor) + '</p>' : '') + '</div>' +
+      '<p class="sum-asof">截至 ' + roc(to) + '<br><span>本期：' + roc(from, '/') + ' ～ ' + roc(to, '/') + '</span></p>' +
+      '<h4>一、材料進場抽驗情形：</h4>' + head(cm) + '</p>' + tbl(d.mats, COLS, basic) +
+      '<h4>二、分項施工抽查情形：</h4>' + head(cc) + '</p>' + tbl(d.cons, COLS, basic) +
+      '<h4>三、缺失改善追蹤情形：' + (d.defs.length ? '' : '無') + '</h4>' + head(cd) + '　　已改善：<b>' + fixedN + '</b> 次　未改善：<b>' + (d.defs.length - fixedN) + '</b> 次</p>' +
+      (d.defs.length ? tbl(d.defs, [['項次', '7%'], ['項目名稱', '22%'], ['位置', '13%'], ['抽驗日期', '12%'], ['缺失內容', '28%'], ['改善情形', '18%']], function (x) {
+        return '<td>' + esc(x.name) + '</td><td class="c">' + esc(x.loc) + '</td><td class="c">' + roc(x.date, '/') + '</td><td>' + esc(x.txt) + '</td><td class="c">' + (x.st === 'fixed' ? esc(x.fixed) : '<b class="sum-ng">' + esc(x.fixed) + '</b>') + '</td>';
+      }) : '') +
+      '<p class="sum-note">註：灰色為前期（' + roc(from, '/') + ' 以前）紀錄；不含尚未確認存檔的草稿。</p>' + foot();
+    bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
+    $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
+    show('vPreview');
+    setDocName('抽查總表_' + (I.name || '') + '_截至' + roc(to, '.'));
   }
 
   /* ========== 抽查照片：屬於每一張抽查單（照片檔存於 IndexedDB，容量較大） ========== */

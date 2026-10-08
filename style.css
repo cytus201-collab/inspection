@@ -493,3 +493,27 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sr-none{padding:14px 12px;color:var(--muted);font-size:14px}
 .sr-hint{font-size:12px;margin:0}
 @media (max-width:600px){.sr-box{margin-top:0;max-height:100vh;height:100%;width:100%;border-radius:0}.sr-hint{display:none}}
+
+/* v32 抽查總表 */
+.sum-bar{display:flex;gap:10px;flex-wrap:wrap;font-size:14px;font-weight:700}
+.sum-bar label{display:flex;align-items:center;gap:6px}
+.sum-bar input{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:14px;background:var(--bg);color:var(--ink)}
+.paper.sum-paper{font-size:10.5pt}
+.sum-paper .sum-title{text-align:center}
+.sum-paper .sum-title h3{margin:0 0 4px;font-size:15pt}
+.sum-paper .sum-title p{margin:2px 0;font-size:11.5pt}
+.sum-paper .sum-sup{font-weight:700}
+.sum-paper .sum-asof{text-align:right;margin:6px 0 4px;font-weight:700}
+.sum-paper .sum-asof span{font-weight:400;font-size:9.5pt}
+.sum-paper h4{margin:14px 0 4px;font-size:11pt}
+.sum-paper .sum-cnt{margin:2px 0 6px 2em}
+.sum-paper table.sum{width:100%;border-collapse:collapse;table-layout:fixed}
+.sum-paper table.sum th,.sum-paper table.sum td{border:1px solid #000;padding:4px 5px;line-height:1.35;word-break:break-all}
+.sum-paper table.sum th{background:#eee;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sum-paper table.sum td.c{text-align:center}
+.sum-paper table.sum tr.prev td{color:#999}
+.sum-paper .sum-ng{color:#c00}
+.sum-paper tr.prev .sum-ng{color:#d88}
+.sum-paper .sum-none{margin:2px 0 6px 2em;color:#666}
+.sum-paper .sum-note{font-size:8.5pt;margin:8px 0 0;color:#555}
+@media print{.sum-paper table.sum tr{break-inside:avoid}.sum-paper h4{break-after:avoid}}
