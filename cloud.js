@@ -49,7 +49,7 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], phrases: p.phrases || null, matOutAt: p.matOutAt || '', created: p.created });
+      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], phrases: p.phrases || null, matOutAt: p.matOutAt || '', stdLog: p.stdLog || [], created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
@@ -143,6 +143,7 @@
         if ('dwgs' in d) p.dwgs = d.dwgs || []; else if ((p.dwgs || []).length) meta.dirty[x.key] = 1;
         if ('trash' in d) p.trash = d.trash || [];
         if ('phrases' in d) { if (d.phrases) p.phrases = d.phrases; else delete p.phrases; } else if (p.phrases) meta.dirty[x.key] = 1; p.matOutAt = d.matOutAt || '';
+        if ('stdLog' in d) p.stdLog = d.stdLog || []; else if ((p.stdLog || []).length) meta.dirty[x.key] = 1;
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
@@ -282,7 +283,7 @@
     cycle();
   }
 
-  window.Cloud = { init: init, editors: function (id) { return editors(id); },
+  window.Cloud = { init: init, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };

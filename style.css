@@ -537,3 +537,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sum-paper table.trk + table.ph{margin-top:-1px}
 .sum-paper table.ph + table.trk{margin-top:-1px}
 .paper.landscape.sum-paper{font-size:9.5pt}
+
+/* v40 抽查標準管理 */
+.std-group{display:flex;flex-direction:column;gap:10px}
+.std-item{border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.std-item.mod{border-color:#e0b84a;background:#fffaf0}
+.std-item.off{opacity:.55}
+.std-item.off .std-l{display:none}
+.std-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.std-code{font-weight:700;color:var(--muted)}
+.std-badge{background:#e0b84a;color:#3d2e00;border-radius:999px;padding:1px 8px;font-weight:700}
+.std-off{margin-left:auto;display:flex;align-items:center;gap:4px;font-weight:600}
+.std-l{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--muted);flex:1;min-width:0}
+.std-row{display:flex;gap:10px;flex-wrap:wrap}
+.std-row .std-l{min-width:180px}
+.std-foot{margin:4px 0 14px}
+.std-log ul{margin:8px 0 0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:6px}
+#vStd .seg{display:flex;flex-wrap:wrap;gap:8px}

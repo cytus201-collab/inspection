@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=39">
+<link rel="stylesheet" href="style.css?v=40">
 </head>
 <body>
 
@@ -73,6 +73,7 @@
         <div class="checks" id="workPick"></div>
         <button type="button" class="link" id="btnWorkAll">全部顯示</button>
         <button type="button" class="link" id="btnWorkOrder">恢復預設排序</button>
+        <button type="button" class="link" id="btnStd">⚙ 抽查標準（本工程）</button>
       </details>
       <p class="muted sort-hint">長按工項卡片可拖曳調整順序。</p>
       <div id="workGrid" class="work-grid"></div>
@@ -305,6 +306,16 @@
   </section>
 </main>
 
+<!-- ===== 抽查標準管理 ===== -->
+<main id="vStd" class="view wrap" hidden>
+  <section class="card">
+    <p class="muted" style="margin-top:0">這裡的修改只套用在本工程之後新增的抽查表；已存檔的抽查表保留當時的標準。數值請依本案契約圖說確認。</p>
+    <div class="grid"><label class="f">工項<select id="stdWork"></select></label></div>
+    <div class="seg" id="stdPh" role="radiogroup" aria-label="階段" style="margin-top:10px"></div>
+  </section>
+  <div id="stdBody"></div>
+</main>
+
 <!-- ===== 8 預覽列印 ===== -->
 <main id="vPreview" class="view" hidden>
   <div class="toolbar noprint">
@@ -459,9 +470,9 @@
   </div>
 </div>
 
-<script src="data.js?v=39"></script>
-<script src="mat-parse.js?v=39"></script>
-<script src="cloud.js?v=39"></script>
-<script src="app.js?v=39"></script>
+<script src="data.js?v=40"></script>
+<script src="mat-parse.js?v=40"></script>
+<script src="cloud.js?v=40"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

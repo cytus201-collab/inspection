@@ -128,6 +128,7 @@
   }
   /* 實際使用的抽查項目：預設項目（可改標準、可移除）＋自行新增的項目 */
   /* 抽查項目以固定代碼對應：r.res[項目代碼]、r.extra[分組代碼]。已確認的表使用存檔當下的標準快照（r.snap），法規更新不影響舊表 */
+  function refText(code) { return code ? D.refs[code] || code : ''; }
   function hasStd(w) { return !!(w && w.phases && w.phases.length && w.kind !== 'irregular' && w.kind !== 'photo'); }
   function baseGroups(w, r) { return r.snap && !r.draft ? r.snap.groups : w.phases[r.phase].groups; }
   function snapOf(w, r) {
@@ -143,9 +144,9 @@
       g.items.forEach(function (it) {
         var key = it.id, c = r.res[key] || { r: '', note: '' };
         if (c.off) { removed.push({ key: key, name: it.name }); return; }
-        items.push({ key: key, name: it.name, std: c.std != null ? c.std : it.std, def: it.std, hint: it.hint, ref: it.ref, c: c });
+        items.push({ key: key, name: c.name || it.name, std: c.std != null ? c.std : it.std, def: it.std, hint: c.hint != null ? c.hint : it.hint, ref: c.ref != null ? c.ref : it.ref, c: c });
       });
-      (r.extra[g.id] || []).forEach(function (x, xi) { items.push({ x: g.id + '|' + xi, name: x.name, std: x.std, hint: '', ref: '', c: x, custom: true }); });
+      (r.extra[g.id] || []).forEach(function (x, xi) { items.push({ x: g.id + '|' + xi, name: x.name, std: x.std, hint: x.hint || '', ref: x.ref || '', c: x, custom: true }); });
       return { name: g.name, gi: gi, gid: g.id, items: items, removed: removed };
     });
   }
@@ -221,7 +222,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -269,7 +270,7 @@
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
-      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint
+      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd
     })[cur.v]();
     coEdit();
     if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
@@ -651,7 +652,7 @@
         var std = '<textarea class="std-in" data-f="std" rows="2" placeholder="抽查標準（定性定量）" aria-label="抽查標準">' + esc(it.std) + '</textarea>';
         var tools = '<div class="row-tools">' + (!it.custom && it.std !== it.def ? '<button type="button" class="link" data-reset="' + it.key + '">還原預設標準</button>' : '') +
           (it.custom ? '<button type="button" class="link" data-delx="' + it.x + '">刪除此項目</button>' : '<button type="button" class="link" data-off="' + it.key + '">移除此項</button>') + '</div>';
-        return _itemHtml(attr, 'r' + id, name + std + tools, '', it.custom ? '' : D.refs[it.ref], it.c.r, it.c.note, it.hint, 'n' + id);
+        return _itemHtml(attr, 'r' + id, name + std + tools, '', refText(it.ref), it.c.r, it.c.note, it.hint, 'n' + id);
       }).join('');
       var rem = g.removed;
       var remHtml = rem.length ? '<div class="removed">已移除：' + rem.map(function (o) { return '<button type="button" class="link" data-restore="' + o.key + '">' + esc(o.name) + ' ↺</button>'; }).join('') + '</div>' : '';
@@ -762,11 +763,99 @@
     var list = $('groups').querySelectorAll('[data-x^="' + gi + '|"] .inline-in'); var el = list[list.length - 1];
     if (el) { el.focus(); el.scrollIntoView({ block: 'center' }); }
   }
+  /* ========== 抽查標準管理（每個工程各自一套，存在 p.tpl；已存檔的表不受影響） ========== */
+  $('btnStd').addEventListener('click', function () { go({ v: 'std', pid: cur.pid }); });
+  function stdWorks(p) { return orderedWorks(p).filter(function (w) { return hasStd(w) && w.kind !== 'matform'; }).concat(D.matWork && hasStd(D.matWork) ? [D.matWork] : []); }
+  function stdTpl(p, wid, pi, make) {
+    var t = p.tpl && p.tpl[wid] && p.tpl[wid][pi];
+    if (!t && make) { p.tpl = p.tpl || {}; p.tpl[wid] = p.tpl[wid] || {}; t = p.tpl[wid][pi] = { cells: {}, extra: {}, kv: 2 }; }
+    return t;
+  }
+  function stdClean(p, wid, pi) {
+    var t = stdTpl(p, wid, pi); if (!t) return;
+    Object.keys(t.cells).forEach(function (k) { var c = t.cells[k]; if (c.std == null && !c.off && !c.name && c.hint == null && c.ref == null) delete t.cells[k]; });
+    Object.keys(t.extra).forEach(function (g) { if (!t.extra[g].length) delete t.extra[g]; });
+    if (!Object.keys(t.cells).length && !Object.keys(t.extra).length) delete p.tpl[wid][pi];
+  }
+  function stdLog(p, w, pi, txt) {
+    p.stdLog = p.stdLog || [];
+    p.stdLog.unshift({ t: Date.now(), by: (window.Cloud && window.Cloud.me && window.Cloud.me()) || '', wid: w.id, ph: pi, txt: txt });
+    if (p.stdLog.length > 300) p.stdLog.length = 300;
+  }
+  var stdSel = { wid: null, pi: 0 };
+  function renderStd() {
+    var p = proj(cur.pid), ws = stdWorks(p);
+    topbar('抽查標準', p.info.name || '未命名工程', '工程');
+    if (!ws.some(function (w) { return w.id === stdSel.wid; })) stdSel = { wid: ws[0] && ws[0].id, pi: 0 };
+    var w = WORK[stdSel.wid]; if (!w) { $('stdBody').innerHTML = ''; show('vStd'); return; }
+    if (!w.phases[stdSel.pi]) stdSel.pi = 0;
+    var pi = stdSel.pi, t = stdTpl(p, w.id, pi) || { cells: {}, extra: {} };
+    $('stdWork').innerHTML = ws.map(function (x) { var n = p.tpl && p.tpl[x.id] ? Object.keys(p.tpl[x.id]).length : 0; return '<option value="' + x.id + '"' + (x.id === w.id ? ' selected' : '') + '>' + esc(x.name) + (n ? '（已調整）' : '') + '</option>'; }).join('');
+    $('stdPh').innerHTML = w.phases.length > 1 ? w.phases.map(function (ph, i) { var m = !!stdTpl(p, w.id, i); return '<label class="pill"><input type="radio" name="stdPh" value="' + i + '"' + (i === pi ? ' checked' : '') + '><span>' + esc(ph.name) + (m ? ' ●' : '') + '</span></label>'; }).join('') : '';
+    var refOpts = Object.keys(D.refs).map(function (k) { return '<option value="' + esc(D.refs[k]) + '">'; }).join('');
+    var fld = function (f, v, ph, area) { return area ? '<textarea class="inline-in" data-f="' + f + '" rows="2" placeholder="' + ph + '">' + esc(v) + '</textarea>' : '<input class="inline-in" data-f="' + f + '" placeholder="' + ph + '" value="' + esc(v) + '"' + (f === 'ref' ? ' list="stdRefs"' : '') + '>'; };
+    var card = function (attr, it, mod, off, custom) {
+      return '<div class="std-item' + (off ? ' off' : '') + (mod ? ' mod' : '') + '" ' + attr + '>' +
+        '<div class="std-top"><span class="std-code">' + (custom ? '本工程新增' : esc(it.id)) + '</span>' + (mod ? '<span class="std-badge">已調整</span>' : '') +
+        (custom ? '<button type="button" class="link" data-sdel>刪除</button>' : (mod ? '<button type="button" class="link" data-sreset>還原公司預設</button>' : '') + '<label class="std-off"><input type="checkbox" data-soff' + (off ? ' checked' : '') + '>本工程不使用</label>') + '</div>' +
+        '<label class="std-l">項目名稱' + fld('name', it.name, '項目名稱') + '</label>' +
+        '<label class="std-l">抽查標準' + fld('std', it.std, '抽查標準（定性或定量）', true) + '</label>' +
+        '<div class="std-row"><label class="std-l">實測提示' + fld('hint', it.hint || '', '例：實測：＿＿cm') + '</label><label class="std-l">依據' + fld('ref', refText(it.ref), '例：公司施工抽查紀錄表') + '</label></div></div>';
+    };
+    var html = w.phases[pi].groups.map(function (g) {
+      var items = g.items.map(function (it) {
+        var c = t.cells[it.id] || {}, mod = c.std != null || !!c.name || c.hint != null || c.ref != null;
+        var v = { id: it.id, name: c.name || it.name, std: c.std != null ? c.std : it.std, hint: c.hint != null ? c.hint : it.hint, ref: c.ref != null ? c.ref : it.ref };
+        return card('data-skey="' + it.id + '"', v, mod, !!c.off, false);
+      }).join('') + (t.extra[g.id] || []).map(function (x, xi) { return card('data-sx="' + g.id + '|' + xi + '"', x, false, false, true); }).join('');
+      return '<section class="card std-group"><h3 class="h small">' + esc(g.name) + '</h3>' + items + '<button type="button" class="btn ghost sm" data-sadd="' + g.id + '">＋ 新增項目</button></section>';
+    }).join('');
+    var log = (p.stdLog || []).filter(function (l) { return l.wid === w.id; }).slice(0, 30);
+    $('stdBody').innerHTML = '<datalist id="stdRefs">' + refOpts + '</datalist>' + html +
+      '<div class="std-foot"><button type="button" class="btn ghost" id="btnStdReset"' + (stdTpl(p, w.id, pi) ? '' : ' disabled') + '>此階段全部恢復公司預設</button></div>' +
+      '<details class="card std-log"' + (log.length ? '' : ' hidden') + '><summary>修改紀錄（' + log.length + '）</summary><ul>' + log.map(function (l) {
+        return '<li><span class="muted">' + fmtOut(new Date(l.t - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)) + (l.by ? ' · ' + esc(l.by.replace(/@.*$/, '')) : '') + ' · ' + esc((w.phases[l.ph] || {}).name || '') + '</span><br>' + esc(l.txt) + '</li>';
+      }).join('') + '</ul></details>';
+    show('vStd');
+  }
+  $('stdWork').addEventListener('change', function () { stdSel = { wid: $('stdWork').value, pi: 0 }; renderStd(); });
+  $('stdPh').addEventListener('change', function (e) { if (e.target.name === 'stdPh') { stdSel.pi = +e.target.value; renderStd(); } });
+  function stdBase(w, pi, key) { var it = null; w.phases[pi].groups.forEach(function (g) { g.items.forEach(function (x) { if (x.id === key) it = x; }); }); return it; }
+  var STD_F = { name: '名稱', std: '標準', hint: '提示', ref: '依據' };
+  $('stdBody').addEventListener('change', function (e) {
+    var el = e.target, box = el.closest('[data-skey],[data-sx]'); if (!box) return;
+    var p = proj(cur.pid), w = WORK[stdSel.wid], pi = stdSel.pi, t = stdTpl(p, w.id, pi, true), f = el.dataset.f;
+    if (box.dataset.skey) {
+      var key = box.dataset.skey, base = stdBase(w, pi, key), c = t.cells[key] || (t.cells[key] = { r: '', note: '' });
+      if (el.hasAttribute('data-soff')) { if (el.checked) c.off = true; else delete c.off; stdLog(p, w, pi, (el.checked ? '停用' : '恢復使用') + '「' + (c.name || base.name) + '」'); }
+      else if (f) {
+        var v = el.value.trim(), bv = f === 'ref' ? refText(base.ref) : (base[f] || ''), old = c[f] != null ? (f === 'ref' ? refText(c.ref) : c[f]) : bv;
+        if (v === bv || (f === 'name' && !v)) delete c[f]; else c[f] = f === 'ref' ? (Object.keys(D.refs).filter(function (k) { return D.refs[k] === v; })[0] || v) : v;
+        if (v !== old) stdLog(p, w, pi, '「' + (c.name || base.name) + '」' + STD_F[f] + '：' + (old || '（空白）') + ' → ' + (v || '（空白）'));
+      }
+    } else {
+      var a = box.dataset.sx.split('|'), x = (t.extra[a[0]] || [])[+a[1]]; if (!x || !f) return;
+      var nv = el.value.trim(); if (f === 'ref') nv = Object.keys(D.refs).filter(function (k) { return D.refs[k] === nv; })[0] || nv;
+      if (x[f] !== nv) { stdLog(p, w, pi, '本工程新增項目「' + (f === 'name' ? nv : x.name) + '」' + STD_F[f] + '：' + (x[f] || '（空白）') + ' → ' + (el.value.trim() || '（空白）')); x[f] = nv; }
+    }
+    stdClean(p, w.id, pi); save();
+    if (el.hasAttribute('data-soff')) renderStd();
+    else { var b2 = box.querySelector('.std-badge'); if (box.dataset.skey && !b2 && t.cells[box.dataset.skey]) { box.classList.add('mod'); } }
+  });
+  $('stdBody').addEventListener('click', function (e) {
+    var p = proj(cur.pid), w = WORK[stdSel.wid], pi = stdSel.pi, b = e.target;
+    if (b.dataset.sadd) { var t = stdTpl(p, w.id, pi, true); (t.extra[b.dataset.sadd] = t.extra[b.dataset.sadd] || []).push({ name: '', std: '', hint: '', ref: '', r: '', note: '' }); save(); renderStd(); var n = document.querySelectorAll('[data-sx^="' + b.dataset.sadd + '|"]'); if (n.length) n[n.length - 1].querySelector('input').focus(); return; }
+    var box = b.closest('[data-skey],[data-sx]');
+    if (b.hasAttribute('data-sreset') && box) { var t1 = stdTpl(p, w.id, pi), c = t1 && t1.cells[box.dataset.skey]; if (c) { ['std', 'name', 'hint', 'ref'].forEach(function (f) { delete c[f]; }); stdLog(p, w, pi, '「' + stdBase(w, pi, box.dataset.skey).name + '」還原公司預設'); stdClean(p, w.id, pi); save(); renderStd(); } return; }
+    if (b.hasAttribute('data-sdel') && box) { var a = box.dataset.sx.split('|'), t2 = stdTpl(p, w.id, pi), x = t2.extra[a[0]][+a[1]]; t2.extra[a[0]].splice(+a[1], 1); if (x.name || x.std) stdLog(p, w, pi, '刪除本工程新增項目「' + (x.name || x.std) + '」'); stdClean(p, w.id, pi); save(); renderStd(); return; }
+    if (b.id === 'btnStdReset') ask('恢復公司預設？', '「' + w.name + ' ' + w.phases[pi].name + '」在本工程的調整會全部清除。已存檔的抽查表不受影響。', '取消', '恢復', function () { delete p.tpl[w.id][pi]; stdLog(p, w, pi, '此階段全部恢復公司預設'); save(); renderStd(); });
+  });
+
   /* 本工程預設標準 */
   $('btnTplSave').addEventListener('click', function () {
     var p = proj(cur.pid), w = W(), r = R(), cells = {}, extra = {};
-    Object.keys(r.res).forEach(function (key) { var c = r.res[key]; if (c.std != null || c.off) { cells[key] = { r: '', note: '' }; if (c.std != null) cells[key].std = c.std; if (c.off) cells[key].off = true; } });
-    Object.keys(r.extra || {}).forEach(function (gi) { extra[gi] = r.extra[gi].filter(function (x) { return x.name || x.std; }).map(function (x) { return { name: x.name, std: x.std, r: '', note: '' }; }); });
+    Object.keys(r.res).forEach(function (key) { var c = r.res[key]; if (c.std != null || c.off || c.name || c.hint != null || c.ref != null) { cells[key] = { r: '', note: '' }; ['std', 'name', 'hint', 'ref'].forEach(function (f) { if (c[f] != null && c[f] !== '' || (f === 'std' && c.std != null)) cells[key][f] = c[f]; }); if (c.off) cells[key].off = true; } });
+    Object.keys(r.extra || {}).forEach(function (gi) { extra[gi] = r.extra[gi].filter(function (x) { return x.name || x.std; }).map(function (x) { return { name: x.name, std: x.std, hint: x.hint || '', ref: x.ref || '', r: '', note: '' }; }); });
     p.tpl = p.tpl || {}; p.tpl[w.id] = p.tpl[w.id] || {}; p.tpl[w.id][r.phase] = { cells: cells, extra: extra, kv: 2 }; save();
     $('tplMsg').textContent = '已設為本工程預設。之後在本工程新增的「' + recTitle(w, r) + '」會套用這份抽查標準。';
   });
@@ -827,7 +916,7 @@
       var name = x.custom ? '<input class="inline-in" data-f="name" placeholder="項目名稱" value="' + esc(x.name) + '">' : esc((x.work ? x.work + '／' : '') + x.name);
       var std = x.custom ? '<textarea class="inline-in" data-f="std" rows="1" placeholder="抽查標準（選填）">' + esc(x.std) + '</textarea>' : esc(x.std);
       var del = '<div class="row-tools"><button type="button" class="link" data-delrow="' + i + '">移除此項目</button></div>';
-      return _itemHtml('data-row="' + i + '"', 'row' + i, '<div class="item-name">' + name + '</div>', std ? '<div class="item-std">' + std + '</div>' : '', x.ref ? D.refs[x.ref] : '', x.r, x.note, x.hint, 'rn' + i, del);
+      return _itemHtml('data-row="' + i + '"', 'row' + i, '<div class="item-name">' + name + '</div>', std ? '<div class="item-std">' + std + '</div>' : '', refText(x.ref), x.r, x.note, x.hint, 'rn' + i, del);
     }).join('') + '</section>';
     updateCounts();
     if (scrollLast) { var items = $('groups').querySelectorAll('.item'); var last = items[items.length - 1]; if (last) last.scrollIntoView({ block: 'center' }); }
