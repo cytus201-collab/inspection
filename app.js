@@ -1088,7 +1088,8 @@
       if (brk) curPg = null;
     });
     pages = pages.filter(function (pg) { return pg.textContent.trim() || pg.querySelector('img'); });
-    pages.forEach(function (pg) { pg.style.width = Wmm + 'mm'; pg.style.padding = my + 'mm ' + mx + 'mm'; host.appendChild(pg); });
+    var gw = src.classList.contains('gw-paper');
+    pages.forEach(function (pg) { pg.style.width = Wmm + 'mm'; pg.style.padding = gw ? '0' : my + 'mm ' + mx + 'mm'; host.appendChild(pg); });
     var pdf = new window.jspdf.jsPDF({ orientation: land ? 'landscape' : 'portrait', unit: 'mm', format: 'a4', compress: true });
     var first = true;
     return pages.reduce(function (pr, pg) {
@@ -1552,7 +1553,13 @@
     show('vDocEdit');
   }
   function docSet(d, k, v) { if (k.indexOf('meet.') === 0) d.meet[k.slice(5)] = v; else d[k] = v; }
-  $('docEditBody').addEventListener('input', function (e) { var k = e.target.dataset.k; if (!k) return; docSet(docById(proj(cur.pid), cur.did), k, e.target.value); save(); });
+  $('docEditBody').addEventListener('input', function (e) {
+    var k = e.target.dataset.k; if (!k) return;
+    var p = proj(cur.pid), d = docById(p, cur.did), cfg = docCfg(p);
+    /* 改發文日期時，字號裡的民國年跟著更新（流水號不變） */
+    if (k === 'date' && d.seq && e.target.value && d.no === docNo(cfg, d.date, d.seq)) { d.no = docNo(cfg, e.target.value, d.seq); var ni = $('docEditBody').querySelector('[data-k="no"]'); if (ni) ni.value = d.no; }
+    docSet(d, k, e.target.value); save();
+  });
   $('docEditBody').addEventListener('change', function (e) {
     if (e.target.id !== 'docCtc' || e.target.value === '') return;
     var p = proj(cur.pid), d = docById(p, cur.did), c = docCfg(p).contacts[+e.target.value];
@@ -1581,7 +1588,7 @@
     var single = raw.filter(function (x) { return !/^[ 　\t]/.test(x); }).length === 1 && raw.length === 1;
     raw.forEach(function (l) {
       if (/^([ 　]{2,}|\t)/.test(l) && n) { m++; out += '<div class="gw-p2"><span>(' + cnNum(m) + ')</span><span>' + esc(strip(l)) + '</span></div>'; }
-      else { n++; m = 0; out += single ? '<div class="gw-p1 one"><span></span><span>' + esc(strip(l)) + '</span></div>' : '<div class="gw-p1"><span>' + cnNum(n) + '、</span><span>' + esc(strip(l)) + '</span></div>'; }
+      else { n++; m = 0; out += single ? '<div class="gw-p1 one"><span></span><span>' + esc(strip(l)) + '</span></div>' : '<div class="gw-p1"><span>' + cnNum(n) + '.</span><span>' + esc(strip(l)) + '</span></div>'; }
     });
     return out;
   }
@@ -1603,13 +1610,13 @@
     var body = meet
       ? '<div class="gw-body">' + row('開會事由', esc(d.meet.reason), true) + row('開會時間', meetTime(d.meet.time), true) + row('開會地點', esc(d.meet.place), true) +
         (d.meet.host ? row('主持人', esc(d.meet.host), true) : '') + row('聯絡人及電話', esc(d.meet.ctc), true) + '</div>' +
-        '<div class="gw-cc">出席者：' + esc(d.meet.att) + (d.meet.obs ? '<br>列席者：' + esc(d.meet.obs) : '') + '<br>副本：' + esc(d.cc) + '</div>' +
         (d.meet.note ? '<div class="gw-body"><div class="gw-row big"><span class="gw-k">備註：</span><span class="gw-v"></span></div>' + pointsHtml(d.meet.note) + '</div>' : '')
-      : '<div class="gw-body">' + row('主旨', esc(d.subj), true) + (lines(d.desc).length ? '<div class="gw-row big"><span class="gw-k">說明：</span><span class="gw-v"></span></div>' + pointsHtml(d.desc) : '') + '</div>' +
-        '<div class="gw-cc">正本：' + esc(d.main) + '<br>副本：' + esc(d.cc) + '</div>';
-    var sign = '<div class="gw-sign">' + (meet ? '<span></span>' : '<span>負責人：' + esc(co.head) + '</span>') + (co.seal ? '<img alt="公司章" data-img="' + co.seal + '">' : '<span class="gw-noseal">（尚未上傳公司章）</span>') + '</div>';
+      : '<div class="gw-body">' + row('主旨', esc(d.subj), true) + (lines(d.desc).length ? '<div class="gw-row big"><span class="gw-k">說明：</span><span class="gw-v"></span></div>' + pointsHtml(d.desc) : '') + '</div>';
+    var cc = meet ? '<div class="gw-cc">出席者：' + esc(d.meet.att) + (d.meet.obs ? '<br>列席者：' + esc(d.meet.obs) : '') + '<br>副本：' + esc(d.cc) + '</div>'
+      : '<div class="gw-cc">正本：' + esc(d.main) + '<br>副本：' + esc(d.cc) + '</div>';
+    var end = '<div class="gw-end">' + cc + (meet ? '' : '<div class="gw-head">負責人：' + esc(co.head) + '</div>') + (co.seal ? '<img class="gw-seal" alt="公司章" data-img="' + co.seal + '">' : '<span class="gw-noseal">（尚未上傳公司章）</span>') + '</div>';
     var paper = $('paper'); paper.className = 'paper gw-paper';
-    paper.innerHTML = '<div class="gw">' + head + body + sign + '<div class="gw-pg">第1頁　共1頁</div></div>';
+    paper.innerHTML = '<div class="gw">' + head + body + end + '<div class="gw-pg">第1頁　共1頁</div></div>';
     fillImgs(paper);
     $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會下載檔案' + (window.Cloud ? '，並同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。' : '。');
