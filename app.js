@@ -938,6 +938,7 @@
     var paper = $('paper'); paper.className = 'paper';
     var html = batch.map(function (x, i) { return recPaper(p, w, x, i === 0); }).join('').replace(/^<section class="rec-sec">/, '<section>');
     paper.innerHTML = html || '<p class="pv-empty">所選的內容沒有可輸出的頁面（例如這幾張沒有照片或位置標記）。</p>';
+    fitForms(paper);
     if (!multi) bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
     $('outAt').closest('.out-at').hidden = multi;
     fillImgs(paper);
@@ -1091,6 +1092,26 @@
       (subName ? '<tr><td>分項工程名稱</td><td colspan="3">' + esc(subName) + '</td></tr>' : '') +
       '<tr><td>檢查位置</td><td>' + esc(r.location) + '</td><td>檢查日期</td><td>' + roc(r.checkDate, '.') + '</td></tr>';
   }
+  /* 不定期／勞安：依實際高度補空白列，讓表單不論項目多寡都剛好排滿一張 A4（以列印寬度 190mm 量測） */
+  function fitForms(paper) {
+    var forms = paper.querySelectorAll('.fit-form'); if (!forms.length) return;
+    var mm = 96 / 25.4, target = 276 * mm;
+    var host = document.createElement('div'); host.className = 'paper';
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:190mm;max-width:none;padding:0;border:0;margin:0;visibility:hidden';
+    document.body.appendChild(host);
+    forms.forEach(function (f) {
+      var c = f.cloneNode(true); host.innerHTML = ''; host.appendChild(c);
+      var t = c.querySelector('table.inner'), real = f.querySelector('table.inner'); if (!t || !real) return;
+      var cols = t.rows[0] ? t.rows[0].cells.length : 4, tb = t.tBodies[t.tBodies.length - 1] || t;
+      var mk = function () { var tr = document.createElement('tr'); tr.className = 'blank'; for (var i = 0; i < cols; i++) tr.appendChild(document.createElement('td')); return tr; };
+      var n = 0;
+      while (n < 60 && c.offsetHeight < target) { tb.appendChild(mk()); n++; }
+      if (n && c.offsetHeight > target) n--;
+      var rtb = real.tBodies[real.tBodies.length - 1] || real;
+      for (var i = 0; i < n; i++) rtb.appendChild(mk());
+    });
+    host.remove();
+  }
   function paperSingle(p, w, r) {
     var I = p.info, isIrr = w.kind === 'irregular';
     var title = isIrr ? '不定期抽查紀錄' : '勞安衛生抽查紀錄';
@@ -1103,13 +1124,12 @@
         inner += '<tr><td>' + esc((x.work ? x.work + '／' : '') + x.name) + '</td><td>' + esc(x.std) + '</td><td>' + esc(x.note) + '</td><td class="res' + (x.r === 'ng' ? ' ng' : '') + '">' + (SYM[x.r] || '') + '</td></tr>';
         u += rowUnits(x.name, x.std, x.note) + 0.25;
       });
-      while (u + 1.2 <= PAD.irregular) { inner += '<tr class="blank"><td></td><td></td><td></td><td></td></tr>'; u += 1.2; }
     } else {
       inner += tableBody(effGroups(w, r), PAD.safety);
     }
     inner += '</table>';
     var ng = r.result === 'ng';
-    return '<h3>' + title + '</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
+    return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
       headTable(I.name, '', r) + '</table>' +
       '<table style="border-top:0" class="single"><tbody>' +
       '<tr><td>一、抽驗說明：<br>' + notes.map(function (n, i) { return '(' + '一二三四'[i] + ')' + esc(n); }).join('<br>') + '</td></tr>' +
@@ -1120,7 +1140,7 @@
       (ng && r.methodNote ? '<br>' + esc(r.methodNote) : '') + '</td></tr>' +
       '<tr><td style="line-height:1.7">三、複驗結果：<br>' + box(r.re === 'ok') + '合格<br>' + box(r.re === 'ng') + '不合格，填具「施工不合管制總表」進行追蹤改善<br>複查時間：' + (r.reTime ? roc(r.reTime) : '') + '</td></tr>' +
       '<tr><td class="remark">備註：' + esc(r.remark) + '</td></tr></tbody></table>' +
-      '<p class="signline">監造現場人員：' + esc(I.inspector) + ' ' + sigImg(r, 'sigInspector') + '</p>' + foot();
+      '<p class="signline">監造現場人員：' + esc(I.inspector) + ' ' + sigImg(r, 'sigInspector') + '</p>' + foot() + '</div>';
   }
 
   /* ========== 5 材料抽查管制 ========== */
