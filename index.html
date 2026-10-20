@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 </head>
 <body>
 
@@ -59,7 +59,8 @@
       <button type="button" class="btn ghost sm" id="calNext" aria-label="下個月">›</button>
       <button type="button" class="btn ghost sm" id="calToday">今天</button>
       <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表">📋 總表／缺失</button>
-      <span class="cal-legend"><i class="ev ev-rec"></i>已抽查 <i class="ev ev-plan"></i>預定 <i class="ev ev-mat"></i>材料進場</span>
+      <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文">📨 公文</button>
+      <span class="cal-legend"><i class="ev ev-rec"></i>已抽查 <i class="ev ev-plan"></i>預定 <i class="ev ev-mat"></i>材料進場 <i class="ev ev-doc"></i>公文</span>
     </div>
     <div class="cal-grid" id="calGrid" role="grid"></div>
     <div class="cal-day" id="calDay"></div>
@@ -306,6 +307,41 @@
   </section>
 </main>
 
+<!-- ===== 公文收發 ===== -->
+<main id="vDocs" class="view wrap" hidden>
+  <section class="card">
+    <div class="head-row"><h2 class="h small">發文</h2>
+      <div class="doc-new"><button type="button" class="btn primary sm" id="btnNewLetter">＋ 函</button><button type="button" class="btn ghost sm" id="btnNewMeet">＋ 開會通知單</button></div></div>
+    <div id="docList" class="doc-list"></div>
+    <p class="muted">收文（掃描公文自動辨識、歸檔）為下一階段功能。</p>
+  </section>
+  <details class="card" id="dcSetBox"><summary class="h small">發文設定（本工程）</summary>
+    <div class="grid g3">
+      <label class="f">案件編號（公司內部）<input id="dcCase" placeholder="例：197"></label>
+      <label class="f">字號前綴<input id="dcPrefix" placeholder="例：周建字第"></label>
+      <label class="f">目前最後流水號<input id="dcLast" type="number" min="0" inputmode="numeric"></label>
+    </div>
+    <p class="muted" id="dcNext"></p>
+    <div class="grid g3">
+      <label class="f">案件聯絡人（一行一位：姓名｜電話｜信箱）<textarea id="dcContacts" rows="3" placeholder="監造人員黃奇生｜0932962557｜m09416021@yahoo.com.tw"></textarea></label>
+      <label class="f">常用受文者（一行一個）<textarea id="dcTo" rows="3" placeholder="新竹市政府都市發展處"></textarea></label>
+      <label class="f">常用正本／副本、出席者（一行一個）<textarea id="dcCc" rows="3" placeholder="東陞鼎營造有限公司、本所監造工務所"></textarea></label>
+    </div>
+  </details>
+  <details class="card"><summary class="h small">公司設定（全公司共用）</summary>
+    <div class="grid g3">
+      <label class="f">機關名稱<input id="coName"></label>
+      <label class="f">地址<input id="coAddr"></label>
+      <label class="f">負責人<input id="coHead"></label>
+    </div>
+    <div class="seal-box" id="coSealBox"><span class="muted">公司章（建議透明背景 PNG）</span><img id="coSealImg" alt="公司章" hidden>
+      <label class="btn ghost sm">上傳公司章<input type="file" id="coSealPick" accept="image/png,image/*" hidden></label></div>
+  </details>
+</main>
+<main id="vDocEdit" class="view wrap" hidden>
+  <div id="docEditBody"></div>
+</main>
+
 <!-- ===== 抽查標準管理 ===== -->
 <main id="vStd" class="view wrap" hidden>
   <section class="card">
@@ -470,9 +506,9 @@
   </div>
 </div>
 
-<script src="data.js?v=40"></script>
-<script src="mat-parse.js?v=40"></script>
-<script src="cloud.js?v=40"></script>
-<script src="app.js?v=40"></script>
+<script src="data.js?v=41"></script>
+<script src="mat-parse.js?v=41"></script>
+<script src="cloud.js?v=41"></script>
+<script src="app.js?v=41"></script>
 </body>
 </html>

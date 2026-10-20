@@ -49,7 +49,7 @@
     var out = {}, D = A().D, W = {};
     D.works.forEach(function (w) { W[w.id] = w; }); if (D.matWork) W[D.matWork.id] = D.matWork;
     A().state().projects.forEach(function (p) {
-      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], phrases: p.phrases || null, matOutAt: p.matOutAt || '', stdLog: p.stdLog || [], created: p.created });
+      var pj = JSON.stringify({ _v: SCHEMA, id: p.id, info: p.info, works: p.works || null, wOrder: p.wOrder || null, tpl: p.tpl || null, plans: p.plans || [], dwgs: p.dwgs || [], trash: p.trash || [], phrases: p.phrases || null, matOutAt: p.matOutAt || '', stdLog: p.stdLog || [], docCfg: p.docCfg || null, created: p.created });
       out['project:' + p.id] = { json: pj };
       Object.keys(p.recs || {}).forEach(function (wid) {
         (p.recs[wid] || []).forEach(function (r) {
@@ -62,7 +62,9 @@
         });
       });
       (p.mats || []).forEach(function (m) { out['material:' + m.id] = { json: JSON.stringify({ pid: p.id, mat: m }) }; });
+      (p.docs || []).forEach(function (d) { out['doc:' + d.id] = { json: JSON.stringify({ pid: p.id, doc: d }) }; });
     });
+    var co = A().state().company; if (co) out['cfg:company'] = { json: JSON.stringify({ company: co }) };
     Object.keys(out).forEach(function (k) { out[k].h = hash(out[k].json); });
     return out;
   }
@@ -124,11 +126,7 @@
       if (!x.del && local && local.json === x.json) { meta.hash[x.key] = local.h; return; }
       var i = x.key.indexOf(':'), type = x.key.slice(0, i), id = x.key.slice(i + 1), d;
       if (x.del) {
-        if (type === 'project') S.projects = S.projects.filter(function (p) { return p.id !== id; });
-        else S.projects.forEach(function (p) {
-          if (type === 'material') p.mats = (p.mats || []).filter(function (m) { return m.id !== id; });
-          else Object.keys(p.recs || {}).forEach(function (w) { p.recs[w] = p.recs[w].filter(function (r) { return r.id !== id; }); });
-        });
+        drop(S, type, id);
         delete meta.hash[x.key]; changed.push(x.key); return;
       }
       try { d = JSON.parse(x.json); } catch (e) { return; }
@@ -143,13 +141,19 @@
         if ('dwgs' in d) p.dwgs = d.dwgs || []; else if ((p.dwgs || []).length) meta.dirty[x.key] = 1;
         if ('trash' in d) p.trash = d.trash || [];
         if ('phrases' in d) { if (d.phrases) p.phrases = d.phrases; else delete p.phrases; } else if (p.phrases) meta.dirty[x.key] = 1; p.matOutAt = d.matOutAt || '';
+        if ('docCfg' in d) { if (d.docCfg) p.docCfg = d.docCfg; else delete p.docCfg; } else if (p.docCfg) meta.dirty[x.key] = 1;
         if ('stdLog' in d) p.stdLog = d.stdLog || []; else if ((p.stdLog || []).length) meta.dirty[x.key] = 1;
+      } else if (type === 'cfg') {
+        if (id === 'company') S.company = d.company || {};
       } else {
         var pp = byId[d.pid]; if (!pp) return;
         if (type === 'record') {
           if (A().fixRec) A().fixRec(d.wid, d.rec);   // 舊格式紀錄轉為固定代碼
           var list = pp.recs[d.wid] || (pp.recs[d.wid] = []), k = list.findIndex(function (r) { return r.id === id; });
           if (k >= 0) list[k] = d.rec; else list.push(d.rec);
+        } else if (type === 'doc') {
+          var docs = pp.docs || (pp.docs = []), q = docs.findIndex(function (m) { return m.id === id; });
+          if (q >= 0) docs[q] = d.doc; else docs.push(d.doc);
         } else if (type === 'material') {
           var mats = pp.mats || (pp.mats = []), j = mats.findIndex(function (m) { return m.id === id; });
           if (j >= 0) mats[j] = d.mat; else mats.push(d.mat);
@@ -161,14 +165,19 @@
     if (full) Object.keys(snap).forEach(function (k) {
       if (onServer[k] || meta.dirty[k]) return;
       var i = k.indexOf(':'), type = k.slice(0, i), id = k.slice(i + 1);
-      if (type === 'project') S.projects = S.projects.filter(function (p) { return p.id !== id; });
-      else S.projects.forEach(function (p) {
-        if (type === 'material') p.mats = (p.mats || []).filter(function (m) { return m.id !== id; });
-        else Object.keys(p.recs || {}).forEach(function (w) { p.recs[w] = p.recs[w].filter(function (r) { return r.id !== id; }); });
-      });
+      drop(S, type, id);
       delete meta.hash[k]; changed.push(k);
     });
     return changed;
+  }
+  function drop(S, type, id) {
+    if (type === 'project') S.projects = S.projects.filter(function (p) { return p.id !== id; });
+    else if (type === 'cfg') { if (id === 'company') delete S.company; }
+    else S.projects.forEach(function (p) {
+      if (type === 'material') p.mats = (p.mats || []).filter(function (m) { return m.id !== id; });
+      else if (type === 'doc') p.docs = (p.docs || []).filter(function (m) { return m.id !== id; });
+      else if (type === 'record') Object.keys(p.recs || {}).forEach(function (w) { p.recs[w] = p.recs[w].filter(function (r) { return r.id !== id; }); });
+    });
   }
   function pull() {
     var full = !fullDone;
@@ -283,7 +292,10 @@
     cycle();
   }
 
-  window.Cloud = { init: init, me: function () { return me; }, editors: function (id) { return editors(id); },
+  /* 公文 PDF 歸檔到雲端硬碟「監造公文／工程名稱／收文或發文」（需要新版 Apps Script） */
+  function putDoc(o) { return call('putDoc', o); }
+  function ocrDoc(id) { return call('ocrDoc', id); }
+  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };

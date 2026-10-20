@@ -160,8 +160,44 @@ function getPhoto(id) {
   return 'data:image/jpeg;base64,' + Utilities.base64Encode(it.next().getBlob().getBytes());
 }
 
+/* ---------- 公文（收文、發文）：PDF 存在「監造公文／工程名稱／收文或發文」 ---------- */
+function docRoot_() {
+  var props = PropertiesService.getScriptProperties(), id = props.getProperty('DOC_FOLDER');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var parent = DriveApp.getFileById(SHEET_ID).getParents().next();
+  var it = parent.getFoldersByName('監造公文');
+  var folder = it.hasNext() ? it.next() : parent.createFolder('監造公文');
+  props.setProperty('DOC_FOLDER', folder.getId());
+  return folder;
+}
+function sub_(folder, name) {
+  var it = folder.getFoldersByName(name);
+  return it.hasNext() ? it.next() : folder.createFolder(name);
+}
+/* o: { proj: 工程名稱, dir: '收文' | '發文', name: 檔名, data: base64, mime, old: 舊檔 id（重新歸檔時移到垃圾桶） } */
+function putDoc(o) {
+  var proj = String(o.proj || '未命名工程').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
+  var folder = sub_(sub_(docRoot_(), proj), o.dir === '收文' ? '收文' : '發文');
+  if (o.old) { try { DriveApp.getFileById(o.old).setTrashed(true); } catch (e) {} }
+  var f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(o.data), o.mime || 'application/pdf', o.name || '公文.pdf'));
+  return { id: f.getId(), url: f.getUrl() };
+}
+function getDoc(id) {
+  var f = DriveApp.getFileById(id);
+  return 'data:' + f.getMimeType() + ';base64,' + Utilities.base64Encode(f.getBlob().getBytes());
+}
+/* 掃描公文文字辨識：需在編輯器「服務」加入 Drive API。以 Google 文件 OCR 轉出文字後刪除暫存檔 */
+function ocrDoc(id) {
+  var res, docId;
+  try { res = Drive.Files.copy({ name: 'ocr-tmp', mimeType: 'application/vnd.google-apps.document' }, id, { ocrLanguage: 'zh-TW' }); docId = res.id; }
+  catch (e) { res = Drive.Files.copy({ title: 'ocr-tmp', mimeType: 'application/vnd.google-apps.document' }, id, { ocr: true, ocrLanguage: 'zh-TW' }); docId = res.id; }
+  var text = DocumentApp.openById(docId).getBody().getText();
+  try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {}
+  return text;
+}
+
 /* 第一次使用前由擁有者在編輯器執行一次，完成授權並建立工作表與照片資料夾 */
 function setup() {
-  syncSheet_(); sumSheet_(); photoFolder_();
+  syncSheet_(); sumSheet_(); photoFolder_(); docRoot_();
   Logger.log('完成：已建立「抽查紀錄總覽」「_sync」與照片資料夾');
 }
