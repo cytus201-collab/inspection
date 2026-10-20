@@ -520,3 +520,20 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sum-paper .sum-sub{margin:10px 0 4px 1em;font-weight:700}
 .sum-paper table.sum-stat{margin:4px 0 2px}
 .paper .fit-form tr.blank td{height:22px;padding:0 4px;line-height:1}
+
+/* v39 共編正在編輯提示 */
+.co-edit{position:sticky;top:56px;z-index:5;background:#fff4d6;color:#5a4300;border:1.5px solid #e0b84a;border-radius:8px;padding:10px 12px;font-size:14px;font-weight:700}
+.sum-bar select{padding:6px 8px;border:1.5px solid var(--line);border-radius:6px;font-size:14px;background:var(--bg);color:var(--ink);font-weight:700}
+.sum-paper table.trk{width:100%;border-collapse:collapse;table-layout:fixed;margin:6px 0 0}
+.sum-paper table.trk th,.sum-paper table.trk td{border:1px solid #000;padding:5px 6px;line-height:1.4}
+.sum-paper table.trk th{background:#eee;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sum-paper .trk-txt{height:30mm;vertical-align:top}
+.sum-paper .trk-sig{height:16mm}
+.sum-paper .trk-sig img{height:40px;vertical-align:middle}
+.sum-paper table.ph{margin-top:-1px}
+.sum-paper table.ph th{border:1px solid #000;background:#eee;padding:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sum-paper table.ph .ph-img{height:78mm}
+.sum-paper table.ph .ph-img img{max-height:74mm}
+.sum-paper table.trk + table.ph{margin-top:-1px}
+.sum-paper table.ph + table.trk{margin-top:-1px}
+.paper.landscape.sum-paper{font-size:9.5pt}

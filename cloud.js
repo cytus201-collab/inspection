@@ -16,6 +16,21 @@
   var fullDone = false;
   var swept = false;
   var busy = false, timer = null, lastErr = '', me = '', staleOpen = false, started = false;
+  /* 正在編輯提示：每台裝置一列「edit:裝置代碼」，記錄目前開著哪一張表；舊版畫面會略過這種資料 */
+  if (!meta.dev) meta.dev = Math.random().toString(36).slice(2, 10);
+  var presence = {}, srvNow = 0, beat = { id: null, at: 0 }, EDIT_TTL = 75000;
+  function editingId() { var c = A() && A().cur(); return !c ? '' : c.v === 'form' ? c.rid || '' : c.v === 'matItem' ? c.mid || '' : ''; }
+  function heartbeat() {
+    var id = editingId();
+    if (outdated || (id === beat.id && (!id || Date.now() - beat.at < 25000))) return Promise.resolve();
+    beat = { id: id, at: Date.now() };
+    return call('push', [{ key: 'edit:' + meta.dev, json: JSON.stringify({ rid: id }), sum: null, del: false }]).catch(function () { beat.id = null; });
+  }
+  function editors(id) {
+    if (!id) return [];
+    return Object.keys(presence).filter(function (k) { var x = presence[k]; return x.rid === id && srvNow - x.t < EDIT_TTL; })
+      .map(function (k) { var b = presence[k].by || ''; return b ? b.replace(/@.*$/, '') : '另一位同事'; });
+  }
 
   function load() { try { return JSON.parse(localStorage.getItem(META_KEY)); } catch (e) { return null; } }
   function keep() { try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {} }
@@ -99,6 +114,10 @@
     var byId = {}; S.projects.forEach(function (p) { byId[p.id] = p; });
     var rank = function (x) { return x.del ? 2 : x.key.indexOf('project:') === 0 ? 0 : 1; };
     items.sort(function (a, b) { return rank(a) - rank(b); }).forEach(function (x) {
+      if (x.key.indexOf('edit:') === 0) {
+        if (x.key !== 'edit:' + meta.dev && !x.del) { try { presence[x.key] = { by: x.by, rid: JSON.parse(x.json).rid || '', t: x.t }; } catch (e) {} }
+        return;
+      }
       var local = snap[x.key];
       if (!x.del) onServer[x.key] = 1;
       if (meta.dirty[x.key]) return;                                // 本機有尚未上傳的修改，以本機為準
@@ -153,7 +172,7 @@
   function pull() {
     var full = !fullDone;
     return call('pull', full ? 0 : (meta.since || 0)).then(function (res) {
-      me = res.me || me;
+      me = res.me || me; srvNow = res.now || Date.now();
       var changed = apply(res.items || [], full);
       fullDone = true;
       meta.since = Math.max(0, res.now - 10000); keep();
@@ -165,6 +184,7 @@
         var mine = editing && changed.some(function (k) { return k === 'record:' + c.rid || k === 'material:' + c.mid; });
         if (!editing) A().rerender(); else if (mine) staleOpen = true;
       }
+      if (A().coEdit) A().coEdit();
       return changed.length;
     });
   }
@@ -218,7 +238,7 @@
     if (busy) return Promise.resolve();
     busy = true; status();
     var first = !fullDone;
-    return (first ? pull() : push().then(pull)).then(function () { return push(); }).then(retryPhotos).then(sweepPhotos).then(function () {
+    return (first ? pull() : push().then(pull)).then(function () { return push(); }).then(heartbeat).then(retryPhotos).then(sweepPhotos).then(function () {
       lastErr = ''; meta.last = Date.now(); keep();
     }).catch(function (e) {
       lastErr = /permission|權限|You do not have|找不到|not found/i.test(e.message) ? '沒有共用資料的存取權限，請管理者分享「室內裝修抽查表單」資料夾給你' : e.message;
@@ -262,7 +282,8 @@
     cycle();
   }
 
-  window.Cloud = { init: init, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
+  window.Cloud = { init: init, editors: function (id) { return editors(id); },
+    viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };
 })();

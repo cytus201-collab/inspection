@@ -271,6 +271,18 @@
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
       dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint
     })[cur.v]();
+    coEdit();
+    if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
+  }
+  /* 共編：同一張表有同事開著時顯示提醒 */
+  function coEdit() {
+    var id = cur.v === 'form' ? cur.rid : cur.v === 'matItem' ? cur.mid : '';
+    var who = id && window.Cloud && window.Cloud.editors ? window.Cloud.editors(id) : [];
+    ['coEditForm', 'coEditMat'].forEach(function (bid) {
+      var el = $(bid); if (!el) return;
+      el.hidden = !who.length;
+      if (who.length) el.textContent = '⚠ ' + who.join('、') + ' 也正在開啟這張表。兩人同時修改時，較晚存檔的會覆蓋較早的，請先協調由一人填寫。';
+    });
   }
 
   /* ========== 1 工程清單 ========== */
@@ -1373,6 +1385,7 @@
     if (cur.from > cur.to) { if (e.target.id === 'sumTo') cur.from = sumFromDef(cur.to); else cur.to = cur.from; }
     go(cur, true);
   }
+  $('sumKind').addEventListener('change', function () { cur.kind = $('sumKind').value; go(cur, true); });
   $('sumFrom').addEventListener('change', sumDate); $('sumTo').addEventListener('change', sumDate);
   /* 整理本工程所有已確認的抽查（不含草稿與照片紀錄） */
   function sumData(p, to) {
@@ -1391,7 +1404,7 @@
           else effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (it.c.r === 'ng') items.push(it.name + (it.c.note ? '（' + it.c.note + '）' : '')); }); });
           if (!items.length && r.remark) items.push(r.remark);
           var fd = single ? (r.reTime || '').slice(0, 10) : r.fixDate;
-          defs.push({ date: r.checkDate, no: row.no, name: row.name, loc: row.loc, txt: items.join('；'), st: st, fixed: st === 'fixed' ? '已改善' + (fd ? ' ' + roc(fd, '/') : '') : (!single && r.fix === 'track' ? '追蹤改善中' : '未改善') });
+          defs.push({ date: r.checkDate, no: row.no, name: row.name, loc: row.loc, txt: items.join('；'), st: st, fd: st === 'fixed' ? fd : '', w: w, r: r, single: single, fixed: st === 'fixed' ? '已改善' + (fd ? ' ' + roc(fd, '/') : '') : (!single && r.fix === 'track' ? '追蹤改善中' : '未改善') });
         }
       });
     });
@@ -1434,10 +1447,71 @@
       sub('（二）已送審、尚未核定', g.rev.concat(g.back), ['審查結果', function (m) { return g.back.indexOf(m) >= 0 ? '<b class="sum-ng">' + esc(m.reviewResult) + '</b>' + (m.reviewDate ? '<br>' + d(m.reviewDate) : '') : '審查中'; }]) +
       sub('（三）已核定', g.ok, ['核定日期', function (m) { return d(m.reviewDate); }]) : '');
   }
+  /* 缺失：處理方式、複查結果（不定期／勞安有改善期限與處理方式；施工抽查只有複查結果） */
+  function defInfo(x, to) {
+    var r = x.r || {}, M = { repair: '修補改善', redo: '拆除重作' }, E = { improve: '改善', redo: '拆除重作' };
+    var method = x.single ? M[r.method] || E[r.exec] || '' : '';
+    var dl = x.single ? r.deadline || '' : '';
+    var re = x.st === 'fixed' ? '合格' : x.single && r.re === 'ng' ? '不合格，持續追蹤' : !x.single && r.fix === 'track' ? '追蹤改善中' : '待複查';
+    return { method: method, dl: dl, re: re, late: x.st !== 'fixed' && dl && dl < to };
+  }
+  function renderNgPrint(p, to, d) {
+    var I = p.info, list = d.defs, fx = list.filter(function (x) { return x.st === 'fixed'; }).length, late = 0;
+    var rows = list.map(function (x, i) {
+      var f = defInfo(x, to); if (f.late) late++;
+      return '<tr><td class="c">' + (i + 1) + '</td><td class="c">' + esc(x.no) + '</td><td class="c">' + roc(x.date, '/') + '</td><td>' + esc(x.name) + '</td><td class="c">' + esc(x.loc) + '</td><td>' + esc(x.txt) + '</td>' +
+        '<td class="c">' + esc(f.method) + '</td><td class="c">' + (f.late ? '<b class="sum-ng">' + roc(f.dl, '/') + '<br>逾期</b>' : roc(f.dl, '/')) + '</td><td class="c">' + (x.fd ? roc(x.fd, '/') : '') + '</td>' +
+        '<td class="c">' + (x.st === 'fixed' ? esc(f.re) : '<b class="sum-ng">' + esc(f.re) + '</b>') + '</td></tr>';
+    }).join('');
+    var paper = $('paper'); paper.className = 'paper landscape sum-paper';
+    paper.innerHTML = '<div class="sum-title"><h3>施工不合格管制總表</h3></div><p class="no">工程名稱：' + esc(I.name || '') + (I.supervisor ? '　　監造單位：' + esc(I.supervisor) : '') + '</p>' +
+      '<p class="sum-asof">截至 ' + roc(to) + '</p>' +
+      '<p class="sum-cnt" style="margin-left:0">缺失總數：<b>' + list.length + '</b> 項　　已改善：<b>' + fx + '</b> 項　　未改善：<b>' + (list.length - fx) + '</b> 項　　逾期未改善：<b' + (late ? ' class="sum-ng"' : '') + '>' + late + '</b> 項</p>' +
+      (list.length ? '<table class="sum"><colgroup><col style="width:4%"><col style="width:10%"><col style="width:8%"><col style="width:14%"><col style="width:8%"><col style="width:22%"><col style="width:8%"><col style="width:9%"><col style="width:8%"><col style="width:9%"></colgroup>' +
+        '<thead><tr><th>項次</th><th>表單編號</th><th>發現日期</th><th>工項名稱</th><th>位置</th><th>缺失內容</th><th>處理方式</th><th>改善期限</th><th>改善完成日</th><th>複查結果</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<p class="sum-none">截至本日尚無缺失紀錄。</p>') + foot();
+    $('printHint').textContent = '紙張選 A4 橫向、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
+    setDocName('施工不合格管制總表_' + (I.name || '') + '_截至' + roc(to, '.'));
+  }
+  function renderTrackPrint(p, to, d) {
+    var I = p.info, box2 = function (on) { return on ? '■' : '□'; };
+    var img = function (x) { return '<td class="ph-img">' + (x ? '<img alt="" data-img="' + x.id + '">' : '') + '</td>'; };
+    var cap = function (x) { return '<td class="ph-cap">' + (x ? esc(x.cap) : '') + '</td>'; };
+    var pages = d.defs.map(function (x, i) {
+      var f = defInfo(x, to), r = x.r || {}, phs = r.photos || [];
+      var aft = phs.filter(function (q) { return /改善後|改善完成|完成後|複查/.test(q.cap || ''); }), bef = phs.filter(function (q) { return aft.indexOf(q) < 0; });
+      var fixer = x.single ? '' : esc(r.fixPerson || I.inspector || '') + ' ' + (r.sig && r.sig.sigFixer ? sigImg(r, 'sigFixer') : '');
+      return '<section' + (i ? ' class="rec-sec"' : '') + '><h3>施工品質缺失處理改善暨追蹤紀錄表</h3><p class="no">編號：' + esc(x.no) + '-NG</p>' +
+        '<table class="trk"><colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>' +
+        '<tr><th>工程名稱</th><td colspan="3">' + esc(I.name || '') + '</td></tr>' +
+        '<tr><th>工項名稱</th><td>' + esc(x.name) + '</td><th>位置</th><td>' + esc(x.loc) + '</td></tr>' +
+        '<tr><th>發現日期</th><td>' + roc(x.date) + '</td><th>改善期限</th><td>' + (f.dl ? roc(f.dl) : '') + '</td></tr>' +
+        '<tr><th>缺失內容</th><td colspan="3" class="trk-txt">' + esc(x.txt) + '</td></tr>' +
+        '<tr><th>處理方式</th><td colspan="3">' + box2(f.method === '修補改善' || f.method === '改善') + '修補改善　' + box2(f.method === '拆除重作') + '拆除重作</td></tr></table>' +
+        '<table class="ph"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tr><th>改善前</th><th>改善後</th></tr>' +
+        '<tr>' + img(bef[0]) + img(aft[0]) + '</tr><tr>' + cap(bef[0]) + cap(aft[0]) + '</tr></table>' +
+        '<table class="trk"><colgroup><col style="width:16%"><col style="width:84%"></colgroup>' +
+        '<tr><th>複查結果</th><td>' + box2(x.st === 'fixed') + '已完成改善　' + box2(x.st !== 'fixed') + '未完成改善，持續追蹤</td></tr>' +
+        '<tr><th>複查日期</th><td>' + (x.fd ? roc(x.fd) : '　　年　　月　　日') + '</td></tr>' +
+        '<tr><th>複查人員</th><td class="trk-sig">' + fixer + '</td></tr></table>' + (i === d.defs.length - 1 ? foot() : '') + '</section>';
+    }).join('');
+    var paper = $('paper'); paper.className = 'paper sum-paper';
+    paper.innerHTML = pages || '<p class="pv-empty">截至本日尚無缺失紀錄。</p>';
+    fillImgs(paper);
+    $('printHint').textContent = '每項缺失一頁。照片說明含「改善後」的會放在右側「改善後」欄。紙張選 A4 直式。';
+    setDocName('缺失改善追蹤紀錄表_' + (I.name || '') + '_截至' + roc(to, '.'));
+  }
   function renderSumPrint() {
-    var p = proj(cur.pid), I = p.info, to = cur.to || today(), from = cur.from || sumFromDef(to), d = sumData(p, to);
-    topbar('列印預覽', '抽查總表', I.name);
-    $('sumFrom').value = from; $('sumTo').value = to; $('sumBar').hidden = false;
+    var p = proj(cur.pid), I = p.info, to = cur.to || today(), from = cur.from || sumFromDef(to), d = sumData(p, to), kind = cur.kind || 'sum';
+    topbar('列印預覽', { sum: '抽查總表', ng: '施工不合格管制總表', track: '缺失改善追蹤紀錄表' }[kind], I.name);
+    $('sumFrom').value = from; $('sumTo').value = to; $('sumBar').hidden = false; $('sumKind').value = kind;
+    $('sumFrom').closest('label').hidden = kind !== 'sum';
+    if (kind !== 'sum') {
+      bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
+      show('vPreview');
+      if (kind === 'ng') renderNgPrint(p, to, d); else renderTrackPrint(p, to, d);
+      return;
+    }
     var RES = { ok: 'OK', ng: '<b class="sum-ng">有缺失</b>', fixed: '缺失已改善', todo: '未完成' };
     var cnt = function (list) { var pre = list.filter(function (x) { return x.date < from; }).length; return { pre: pre, now: list.length - pre, all: list.length }; };
     var head = function (c) { return '<p class="sum-cnt">前期累計：<b>' + c.pre + '</b> 次　　本期：<b>' + c.now + '</b> 次　　本期累計：<b>' + c.all + '</b> 次'; };
@@ -2486,7 +2560,7 @@
   window.APP = {
     state: function () { return S; }, setState: function (x) { S = x; }, D: D, cur: function () { return cur; },
     persist: function () { writeLocal(); },
-    rerender: function () { render(); }, ask: ask,
+    rerender: function () { render(); }, ask: ask, coEdit: coEdit,
     fixRec: function (wid, r) { return migrateRec(WORK[wid], r); }, migrate: migrateAll
   };
   /* 啟動：讀取 IndexedDB 中較新的資料後再開始 */
