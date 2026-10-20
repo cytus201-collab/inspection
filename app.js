@@ -268,6 +268,8 @@
     else if (/^(dwg|dwgPrint)$/.test(cur.v) && !dwgById(p, cur.did)) cur = { v: 'dwgs', pid: cur.pid };
     else if (/^(docEdit|docPrint)$/.test(cur.v) && !docById(p, cur.did)) cur = { v: 'docs', pid: cur.pid };
     $('sumBar').hidden = true;
+    /* 公文列印需要零邊界（Safari 不支援具名頁面，所以只在公文預覽時加上全域 @page） */
+    var pgs = $('gwPage'); if (cur.v === 'docPrint' && !pgs) { pgs = document.createElement('style'); pgs.id = 'gwPage'; pgs.textContent = '@page{size:A4 portrait;margin:0}'; document.head.appendChild(pgs); } else if (cur.v !== 'docPrint' && pgs) pgs.remove();
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
@@ -1601,7 +1603,8 @@
     var p = proj(cur.pid), d = docById(p, cur.did), co = company(), meet = d.kind === 'meet';
     topbar('列印預覽', d.no, '返回修改');
     var row = function (k, v, big) { return '<div class="gw-row' + (big ? ' big' : '') + '"><span class="gw-k">' + k + '：</span><span class="gw-v">' + v + '</span></div>'; };
-    var head = '<div class="gw-bind" aria-hidden="true"><span>裝</span><span>訂</span><span>線</span></div>' +
+    var dash = ''; for (var y = 0; y < 245; y += 2.4) dash += '<i style="top:' + y.toFixed(1) + 'mm"></i>';
+    var head = '<div class="gw-bind" aria-hidden="true">' + dash + '<span style="top:72.5mm">裝</span><span style="top:122.3mm">訂</span><span style="top:171mm">線</span></div>' +
       '<div class="gw-file">檔　　號：<br>保存年限：</div>' +
       '<h1 class="gw-title">' + esc(co.name) + '　' + (meet ? '開會通知單' : '函') + '</h1>' +
       '<div class="gw-addr">地址：' + esc(co.addr) + '<br>案件聯絡人：' + esc(d.cName) + '<br>聯絡方式：' + esc(d.cTel) + (d.cMail ? '<br>電子信箱：' + esc(d.cMail) : '') + '</div>' +
