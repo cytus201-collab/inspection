@@ -1103,7 +1103,7 @@
       var c = f.cloneNode(true); host.innerHTML = ''; host.appendChild(c);
       var t = c.querySelector('table.inner'), real = f.querySelector('table.inner'); if (!t || !real) return;
       var cols = t.rows[0] ? t.rows[0].cells.length : 4, tb = t.tBodies[t.tBodies.length - 1] || t;
-      var mk = function () { var tr = document.createElement('tr'); tr.className = 'blank'; for (var i = 0; i < cols; i++) tr.appendChild(document.createElement('td')); return tr; };
+      var mk = function () { var tr = document.createElement('tr'); tr.className = 'blank'; for (var i = 0; i < cols; i++) { var td = document.createElement('td'); td.innerHTML = '&nbsp;'; tr.appendChild(td); } return tr; };
       var n = 0;
       while (n < 60 && c.offsetHeight < target) { tb.appendChild(mk()); n++; }
       if (n && c.offsetHeight > target) n--;

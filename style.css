@@ -519,3 +519,4 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media print{.sum-paper table.sum tr{break-inside:avoid}.sum-paper h4{break-after:avoid}}
 .sum-paper .sum-sub{margin:10px 0 4px 1em;font-weight:700}
 .sum-paper table.sum-stat{margin:4px 0 2px}
+.paper .fit-form tr.blank td{height:22px;padding:0 4px;line-height:1}
