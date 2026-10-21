@@ -1078,6 +1078,13 @@
       .then(function () { btn.disabled = false; btn.textContent = label; });
   });
   function makePdf() {
+    /* 公文：確定標楷體與 Times 已載入才轉成圖片 */
+    if ($('paper').classList.contains('gw-paper') && document.fonts && document.fonts.load) {
+      return Promise.all([document.fonts.load('16pt "GW Kai"', '測'), document.fonts.load('16pt "GW Times"', 'A1')]).catch(function () {}).then(makePdf2);
+    }
+    return makePdf2();
+  }
+  function makePdf2() {
     var src = $('paper'), land = src.classList.contains('landscape');
     var Wmm = land ? 297 : 210, Hmm = land ? 210 : 297, mx = land ? 8 : 10, my = 8;
     var host = document.createElement('div'); host.className = 'pdf-host'; document.body.appendChild(host);
@@ -1623,8 +1630,19 @@
     fillImgs(paper);
     $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會下載檔案' + (window.Cloud ? '，並同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。' : '。');
+    gwFontCheck().then(function (ok) {
+      if (cur.v !== 'docPrint') return;
+      $('pdfMsg').textContent = ok ? '字型：使用本機「標楷體」，與 Pages 範本相同。' : '⚠ 這台裝置找不到「標楷體」，輸出的中文字型會與 Pages 範本不同。Mac 請在「字體簿」搜尋「標楷體」並啟用或下載；Windows 內建標楷體。';
+    });
     show('vPreview');
     setDocName((meet ? '開會通知單_' : '函_') + d.no.replace(/號$/, '') + '_' + (meet ? d.meet.reason : d.subj).replace(/[「」『』]/g, '').slice(0, 24));
+  }
+  var gwFontOk = null;
+  function gwFontCheck() {
+    if (gwFontOk !== null) return Promise.resolve(gwFontOk);
+    if (!window.FontFace) return Promise.resolve(true);
+    return new FontFace('gw-kai-test', 'local("DFKaiShu-SB-Estd-BF"), local("BiauKai"), local("標楷體"), local("DFKai-SB")').load()
+      .then(function () { return (gwFontOk = true); }, function () { return (gwFontOk = false); });
   }
   function archiveDoc(blob) {
     var p = proj(cur.pid), d = docById(p, cur.did); if (!d || !window.Cloud || !window.Cloud.putDoc) return;
