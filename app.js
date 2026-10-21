@@ -269,6 +269,7 @@
     else if (/^(docEdit|docPrint)$/.test(cur.v) && !docById(p, cur.did)) cur = { v: 'docs', pid: cur.pid };
     $('sumBar').hidden = true;
     /* 公文列印需要零邊界（Safari 不支援具名頁面，所以只在公文預覽時加上全域 @page） */
+    if ($('gwFontBar') && cur.v !== 'docPrint') $('gwFontBar').hidden = true;
     var pgs = $('gwPage'); if (cur.v === 'docPrint' && !pgs) { pgs = document.createElement('style'); pgs.id = 'gwPage'; pgs.textContent = '@page{size:A4 portrait;margin:0}'; document.head.appendChild(pgs); } else if (cur.v !== 'docPrint' && pgs) pgs.remove();
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
@@ -1630,20 +1631,89 @@
     fillImgs(paper);
     $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會下載檔案' + (window.Cloud ? '，並同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。' : '。');
-    gwFontCheck().then(function (ok) {
-      if (cur.v !== 'docPrint') return;
-      $('pdfMsg').textContent = ok ? '字型：使用本機「標楷體」，與 Pages 範本相同。' : '⚠ 這台裝置找不到「標楷體」，輸出的中文字型會與 Pages 範本不同。Mac 請在「字體簿」搜尋「標楷體」並啟用或下載；Windows 內建標楷體。';
-    });
+    gwFontCheck().then(function (ok) { if (cur.v === 'docPrint') gwFontBar(ok); });
     show('vPreview');
     setDocName((meet ? '開會通知單_' : '函_') + d.no.replace(/號$/, '') + '_' + (meet ? d.meet.reason : d.subj).replace(/[「」『』]/g, '').slice(0, 24));
   }
-  var gwFontOk = null;
-  function gwFontCheck() {
-    if (gwFontOk !== null) return Promise.resolve(gwFontOk);
-    if (!window.FontFace) return Promise.resolve(true);
-    return new FontFace('gw-kai-test', 'local("DFKaiShu-SB-Estd-BF"), local("BiauKai"), local("標楷體"), local("DFKai-SB")').load()
-      .then(function () { return (gwFontOk = true); }, function () { return (gwFontOk = false); });
+  /* 公文字型：先用本機字型名稱（local()）；Chrome 等瀏覽器讀不到時，改讀取本機標楷體字型檔，存在這台裝置（不上傳） */
+  var GW_PS = 'DFKaiShu-SB-Estd-BF', gwFontOk = null;
+  function gwLocalOk() {
+    if (!window.FontFace) return Promise.resolve(false);
+    return new FontFace('gw-kai-test', 'local("' + GW_PS + '"), local("BiauKai"), local("標楷體"), local("DFKai-SB")').load().then(function () { return true; }, function () { return false; });
   }
+  function gwUseBuf(buf) {
+    var face = new FontFace('GW Kai', sfntFrom(buf, GW_PS));
+    return face.load().then(function (f) { document.fonts.add(f); return true; });
+  }
+  function gwFontCheck() {
+    if (gwFontOk) return Promise.resolve(true);
+    return gwLocalOk().then(function (ok) {
+      if (ok) return (gwFontOk = true);
+      return IDB.get('font:gwkai').then(function (buf) { return buf ? gwUseBuf(buf) : false; }).catch(function () { return false; }).then(function (r) { return (gwFontOk = !!r); });
+    });
+  }
+  /* 字型集合檔（.ttc）取出指定的字型；一般 .ttf/.otf 原樣使用 */
+  function sfntFrom(buf, ps) {
+    var dv = new DataView(buf);
+    if (dv.getUint32(0) !== 0x74746366) return buf;   // 'ttcf'
+    var n = dv.getUint32(8), offs = [], pick = null;
+    for (var i = 0; i < n; i++) offs.push(dv.getUint32(12 + i * 4));
+    var face = function (o) {
+      var nt = dv.getUint16(o + 4), tabs = [];
+      for (var t = 0; t < nt; t++) { var r = o + 12 + t * 16; tabs.push({ tag: dv.getUint32(r), sum: dv.getUint32(r + 4), off: dv.getUint32(r + 8), len: dv.getUint32(r + 12) }); }
+      return { ver: dv.getUint32(o), tabs: tabs };
+    };
+    var psName = function (f) {
+      var nt = f.tabs.filter(function (t) { return t.tag === 0x6e616d65; })[0]; if (!nt) return '';
+      var cnt = dv.getUint16(nt.off + 2), so = nt.off + dv.getUint16(nt.off + 4);
+      for (var k = 0; k < cnt; k++) {
+        var r = nt.off + 6 + k * 12, pid = dv.getUint16(r), id = dv.getUint16(r + 6), len = dv.getUint16(r + 8), off = dv.getUint16(r + 10);
+        if (id !== 6) continue;
+        var str = ''; if (pid === 1) { for (var c = 0; c < len; c++) str += String.fromCharCode(dv.getUint8(so + off + c)); } else { for (var c2 = 0; c2 < len; c2 += 2) str += String.fromCharCode(dv.getUint16(so + off + c2)); }
+        return str;
+      }
+      return '';
+    };
+    var faces = offs.map(face);
+    pick = faces.filter(function (f) { return psName(f) === ps; })[0] || faces[0];
+    var nt2 = pick.tabs.length, head = 12 + nt2 * 16, size = head;
+    pick.tabs.forEach(function (t) { size += (t.len + 3) & ~3; });
+    var out = new ArrayBuffer(size), ov = new DataView(out), ob = new Uint8Array(out), src = new Uint8Array(buf), pos = head;
+    ov.setUint32(0, pick.ver); ov.setUint16(4, nt2);
+    var es = Math.floor(Math.log2(nt2)), sr = Math.pow(2, es) * 16; ov.setUint16(6, sr); ov.setUint16(8, es); ov.setUint16(10, nt2 * 16 - sr);
+    pick.tabs.forEach(function (t, i) {
+      var r = 12 + i * 16; ov.setUint32(r, t.tag); ov.setUint32(r + 4, t.sum); ov.setUint32(r + 8, pos); ov.setUint32(r + 12, t.len);
+      ob.set(src.subarray(t.off, t.off + t.len), pos); pos += (t.len + 3) & ~3;
+    });
+    return out;
+  }
+  function gwFontBar(ok) {
+    var bar = $('gwFontBar'); if (!bar) return;
+    bar.hidden = false;
+    bar.innerHTML = ok ? '✓ 字型：標楷體（與 Pages 範本相同）'
+      : '⚠ 瀏覽器讀不到這台電腦的「標楷體」，目前顯示的是替代字型，輸出會與 Pages 不同。' +
+        (window.queryLocalFonts ? '<button type="button" class="btn primary sm" id="gwFontQuery">讀取本機標楷體</button>' : '') +
+        '<label class="btn ghost sm">選擇標楷體字型檔…<input type="file" id="gwFontFile" accept=".ttf,.ttc,.otf,font/*" hidden></label>' +
+        '<small>只需設定一次，字型檔只存在這台裝置。Mac：「字體簿」找到「標楷體」→ 右鍵「在 Finder 中顯示」即是字型檔；Windows：C:\\Windows\\Fonts\\kaiu.ttf。</small>';
+  }
+  function gwSaveBuf(buf) {
+    return gwUseBuf(buf).then(function () {
+      gwFontOk = true; IDB.put('font:gwkai', buf).catch(function () {});
+      if (cur.v === 'docPrint') { gwFontBar(true); renderDocPrint(); }
+    }).catch(function () { $('gwFontBar').insertAdjacentHTML('beforeend', '<b class="sum-ng">這個檔案無法當作字型使用，請改選標楷體的字型檔。</b>'); });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.id !== 'gwFontQuery') return;
+    window.queryLocalFonts({ postscriptNames: [GW_PS] }).then(function (list) {
+      var f = list.filter(function (x) { return x.postscriptName === GW_PS; })[0] || list[0];
+      if (!f) throw new Error('none');
+      return f.blob().then(function (b) { return b.arrayBuffer(); }).then(gwSaveBuf);
+    }).catch(function () { $('gwFontBar').insertAdjacentHTML('beforeend', '<b class="sum-ng">讀取失敗（可能未允許或在共編版的框架內無法使用），請改用「選擇標楷體字型檔」。</b>'); });
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'gwFontFile' || !e.target.files[0]) return;
+    e.target.files[0].arrayBuffer().then(gwSaveBuf);
+  });
   function archiveDoc(blob) {
     var p = proj(cur.pid), d = docById(p, cur.did); if (!d || !window.Cloud || !window.Cloud.putDoc) return;
     var rd = new FileReader();
@@ -2856,6 +2926,7 @@
   };
   /* 啟動：讀取 IndexedDB 中較新的資料後再開始 */
   function boot() {
+    try { gwFontCheck(); } catch (e) {}
     S.projects.forEach(function (p) { if (!p.mats) p.mats = []; });
     migrateBoot();
     go({ v: 'projects' }, true);

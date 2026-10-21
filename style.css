@@ -608,3 +608,5 @@ button,input,select,textarea{font:inherit;color:inherit}
 .gw-noseal{position:absolute;right:5.8mm;bottom:12mm;font-size:10pt;color:#999}
 .gw-pg{position:absolute;top:281.8mm;left:0;right:0;text-align:center;font-size:9pt;line-height:4mm}
 @media print{.paper.gw-paper{width:210mm;padding:0;margin:0}.gw{min-height:296mm;height:296mm}}
+.gw-font{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px auto 0;max-width:210mm;padding:10px 12px;border:1.5px solid #e0b84a;background:#fff8e6;color:#4a3800;border-radius:8px;font-size:14px;font-weight:700}
+.gw-font small{flex-basis:100%;font-weight:400}
