@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=54">
+<link rel="stylesheet" href="style.css?v=55">
 </head>
 <body>
 
@@ -417,10 +417,10 @@
     <div class="grid"><label class="f">工程名稱<select id="driProj"></select></label>
       <label class="f">重複資料處理<select id="driDup"><option value="over">覆蓋既有紀錄</option><option value="skip">略過已有日報</option></select></label></div></section>
   <section class="card"><h2 class="h small">步驟二：載入 Excel 施工日誌</h2>
-    <div class="dri-drop" id="driDrop" role="button" tabindex="0"><b>點擊或拖曳 .xlsx／.xls 檔案到此處</b><span class="muted">系統會自動偵測「標準單日頁籤」或「垂直堆疊（同一張表整月）」格式；可一次放多個檔案</span><input type="file" id="driFile" accept=".xlsx,.xls,.xlsm" multiple hidden></div>
+    <div class="dri-drop" id="driDrop" role="button" tabindex="0"><b>點擊或拖曳 .xlsx／.xls／.xlsm 檔案到此處</b><span class="muted">系統會自動偵測「標準單日頁籤」、「垂直堆疊（同一張表整月）」或巨集版「總表（一欄一天）」格式；可一次放多個檔案</span><input type="file" id="driFile" accept=".xlsx,.xls,.xlsm" multiple hidden></div>
     <p class="muted" id="driFilesInfo"></p>
     <div class="grid g4">
-      <label class="f">解析引擎<select id="driEngine"><option value="auto">自動偵測</option><option value="sheet">標準單日頁籤</option><option value="stack">垂直堆疊</option></select></label>
+      <label class="f">解析引擎<select id="driEngine"><option value="auto">自動偵測</option><option value="sheet">標準單日頁籤</option><option value="stack">垂直堆疊</option><option value="matrix">總表（一欄一天，巨集版 xlsm）</option></select></label>
       <label class="f">讀取最大欄位<input id="driMax" type="number" min="10" max="200"></label>
       <label class="f">日期搜尋關鍵字<input id="dri_date"></label>
       <label class="f">工程項目關鍵字<input id="dri_item"></label>
@@ -605,9 +605,9 @@
   </div>
 </div>
 
-<script src="data.js?v=54"></script>
-<script src="mat-parse.js?v=54"></script>
-<script src="cloud.js?v=54"></script>
-<script src="app.js?v=54"></script>
+<script src="data.js?v=55"></script>
+<script src="mat-parse.js?v=55"></script>
+<script src="cloud.js?v=55"></script>
+<script src="app.js?v=55"></script>
 </body>
 </html>

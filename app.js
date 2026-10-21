@@ -2307,6 +2307,61 @@
     }
     return out;
   }
+  function driMatrix(ws, sn, c, log) {
+    var X = window.XLSX, raw = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true });
+    var shown = X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true });
+    var dr = -1, d0 = -1;
+    for (var i = 0; i < Math.min(15, raw.length) && dr < 0; i++) {
+      var n = 0, first = -1;
+      raw[i].forEach(function (v, j) { if (toDate(v)) { n++; if (first < 0) first = j; } });
+      if (n >= 10) { dr = i; d0 = first; }
+    }
+    if (dr < 0) return null;
+    var label = function (r) { for (var j = 0; j < d0; j++) { var t = txt(raw[r][j]); if (t) { var k = j; while (++k < d0) { var t2 = txt(raw[r][k]); if (t2 && /天氣|進度|工程項目|施工內容/.test(t2)) return t2; } return t; } } return ''; };
+    var rowOf = function (re) { for (var r = 0; r < raw.length; r++) { for (var j = 0; j < d0; j++) if (re.test(txt(raw[r][j]))) return r; } return -1; };
+    var rAm = rowOf(/^上午天氣/), rPm = rowOf(/^下午天氣/), rPl = rowOf(/^預定進度/), rAc = rowOf(/^實際進度/);
+    var hdr = -1, col = {};
+    for (var r = 0; r < raw.length && hdr < 0; r++) {
+      var cells = raw[r].slice(0, d0).map(txt);
+      if (cells.indexOf('工程項目') >= 0 && cells.some(function (t) { return /^單位$/.test(t); })) {
+        hdr = r; cells.forEach(function (t, j) { if (/項次/.test(t)) col.code = j; if (t === '工程項目') col.name = j; if (/^單位$/.test(t)) col.unit = j; if (/^(契約)?數量$/.test(t) && col.contract == null) col.contract = j; });
+      }
+    }
+    if (rAc < 0 || hdr < 0) { log.push('　工作表「' + sn + '」有日期列，但找不到實際進度或工程項目表頭，略過'); return null; }
+    var K = kws(c.black), items = [];
+    for (r = hdr + 1; r < raw.length; r++) {
+      var nm = String(raw[r][col.name] || '').trim(), cd = col.code != null ? String(raw[r][col.code] || '').trim() : '';
+      if (/總計|施工內容/.test(txt(nm)) || /施工內容/.test(txt(cd))) break;
+      if (!nm || !cd || col.unit != null && !txt(raw[r][col.unit])) continue;   // 章節列（無單位）略過
+      var full = (cd + ' ' + nm).replace(/\s+/g, ' ');
+      if (K.some(function (k) { return full.indexOf(k) >= 0; })) continue;
+      items.push({ r: r, name: full, unit: String(raw[r][col.unit] || '').trim(), contract: num(raw[r][col.contract]) });
+    }
+    var rTxt = rowOf(/^施工內容$/), pv = function (r, j) { if (r < 0) return ''; var s2 = String(shown[r][j] || '').trim(), v = num(raw[r][j]); if (v == null) return ''; return /%$/.test(s2) ? parseFloat(s2) : v <= 1 ? v * 100 : v; };
+    var cols = [];
+    raw[dr].forEach(function (v, j) {
+      if (j < d0) return; var dt = toDate(v); if (!dt) return;
+      var pre = raw.slice(0, dr + 3).some(function (row) { return /前期累計/.test(txt(row[j])); });
+      cols.push({ j: j, dt: dt, pre: pre });
+    });
+    /* 有資料的日子：有工項數量或施工內容；匯入範圍為第一天到最後一個有資料的日子 */
+    var active = function (j) { if (items.some(function (it) { return num(raw[it.r][j]); })) return true; for (var r2 = rTxt + 1; rTxt >= 0 && r2 < rTxt + 11; r2++) if (txt(raw[r2] && raw[r2][j]) && !/^[-－]$/.test(txt(raw[r2][j]))) return true; return false; };
+    var real = cols.filter(function (x) { return !x.pre; }), last = -1;
+    real.forEach(function (x, k) { if (active(x.j)) last = k; });
+    if (last < 0) { log.push('　工作表「' + sn + '」沒有任何已填寫的日子'); return []; }
+    var cum = {}, out = [];
+    cols.filter(function (x) { return x.pre; }).forEach(function (x) { items.forEach(function (it) { cum[it.r] = (cum[it.r] || 0) + (num(raw[it.r][x.j]) || 0); }); });
+    real.slice(0, last + 1).forEach(function (x) {
+      var d = { date: x.dt, wAm: rAm >= 0 ? String(raw[rAm][x.j] || '').trim() : '', wPm: rPm >= 0 ? String(raw[rPm][x.j] || '').trim() : '', plan: pv(rPl, x.j), act: pv(rAc, x.j), items: [] };
+      items.forEach(function (it) {
+        var q = num(raw[it.r][x.j]) || 0; cum[it.r] = Math.round(((cum[it.r] || 0) + q) * 1e6) / 1e6;
+        if (q) d.items.push({ name: it.name, unit: it.unit, qty: String(Math.round(q * 1e6) / 1e6), cum: String(cum[it.r]), contract: it.contract == null ? '' : String(it.contract) });
+      });
+      out.push(d);
+    });
+    log.push('　工作表「' + sn + '」：' + items.length + ' 個契約工項，' + out[0].date + ' ～ ' + out[out.length - 1].date + '，共 ' + out.length + ' 天');
+    return out;
+  }
   function driParseBook(wb, name, c, log) {
     var days = [], X = window.XLSX;
     var sheets = wb.SheetNames.map(function (sn) {
@@ -2315,6 +2370,12 @@
       rows.forEach(function (r, i) { r.shown = shown[i] || []; });   // 儲存格顯示的文字（判斷是否為百分比格式）
       return { sn: sn, rows: rows };
     });
+    /* 巨集版 xlsm：「總表」一欄一天（列：日期、天氣、預定／實際進度、各契約工項本日數量） */
+    if (c.engine === 'auto' || c.engine === 'matrix') {
+      var mx = [];
+      wb.SheetNames.forEach(function (sn) { var r = driMatrix(wb.Sheets[sn], sn, c, log); if (r) mx = mx.concat(r); });
+      if (mx.length || c.engine === 'matrix') { log.unshift('■ ' + name + '：總表（一欄一天）'); return mx; }
+    }
     var isDiary = function (rows) { return rows.slice(0, 15).some(function (r) { return r.some(function (v) { return /施工日誌/.test(txt(v)); }); }); };
     var perSheet = sheets.filter(function (s) { return isDiary(s.rows) && s.rows.length < 120; });
     var engine = c.engine === 'auto' ? (perSheet.length >= 2 ? 'sheet' : 'stack') : c.engine;
