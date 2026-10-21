@@ -665,8 +665,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .dr-auto ul{margin:6px 0 0;padding-left:18px}.dr-auto ul.off{opacity:.45;text-decoration:line-through}
 /* 監造報表列印 */
 .paper.dr-paper{padding:0;width:210mm;overflow:hidden}
-.dr-page{width:210mm;height:296mm;box-sizing:border-box;padding:10mm 13mm;position:relative}
-.dr-sheet{font-family:"GW Times","GW Kai","Times New Roman","DFKai-SB","BiauKai TC","標楷體-繁","BiauKai","標楷體",serif;color:#000}
+.dr-page{width:210mm;height:296mm;box-sizing:border-box;padding:17.5mm 0 0 12.4mm;position:relative}
+.dr-sheet{font-family:"GW Times","Times New Roman","PMingLiU","MingLiU","新細明體","Songti TC","LiSong Pro","Noto Serif CJK TC",serif;color:#000}
 .dr-t{border-collapse:collapse;table-layout:fixed;width:auto}
 .paper .dr-t td{border:0;padding:0 .6mm;line-height:1.2;white-space:nowrap;overflow:hidden;font-weight:400}
 .dr-t td.dr-w{white-space:pre-wrap;word-break:break-all}

@@ -1874,6 +1874,9 @@
     var I = p.info || {}, dur = +(I.changedDuration || I.duration) || 0;
     return { start: I.startDate || '', dur: dur, planEnd: I.changedEnd || I.planEnd || (I.startDate && dur ? addDays(I.startDate, dur - 1) : ''), amount: I.changedAmount || I.amount || '', changes: I.changeCount || 0, ext: I.extendDays || 0 };
   }
+  /* 日期格式與同事 Excel 列印的 PDF 相同（西元） */
+  function adSlash(d) { var a = (d || '').split('-'); return a.length === 3 ? a[0] + '/' + (+a[1]) + '/' + (+a[2]) : ''; }
+  function adYmd(d) { var a = (d || '').split('-'); return a.length === 3 ? a[0] + '年' + (+a[1]) + '月' + (+a[2]) + '日' : ''; }
   function rocSlash(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '/' + (+a[1]) + '/' + (+a[2]) : ''; }
   function rocYmd(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '年' + (+a[1]) + '月' + (+a[2]) + '日' : ''; }
   function pct(v) { return v === '' || v == null || isNaN(+v) ? '' : (+v).toFixed(2) + '%'; }
@@ -1925,9 +1928,9 @@
     });
     var s4 = lines(a.s4, 's4', d.x4b);
     return {
-      no: el ? el + ' ' : '', wAm: d.wAm || '', wPm: d.wPm || '', date: rocYmd(date), wd: '星期' + '日一二三四五六'[new Date(date + 'T00:00:00').getDay()],
-      name: p.info.name || '', dur: I.dur || '', start: rocSlash(I.start), elapsed: el ? el + ' ' : '', remain: el && I.dur ? (I.dur - el) + ' ' : '', planEnd: rocSlash(I.planEnd), actEnd: rocSlash(p.info.actualEnd || ''),
-      changes: I.changes, ext: I.ext, amount: I.amount ? '原契約:' + Number(String(I.amount).replace(/,/g, '')).toLocaleString('en-US') : '', plan: pct(d.plan), act: pct(d.act),
+      no: el ? el + ' ' : '', wAm: d.wAm || '', wPm: d.wPm || '', date: adYmd(date), wd: '星期' + '日一二三四五六'[new Date(date + 'T00:00:00').getDay()],
+      name: p.info.name || '', dur: I.dur || '', start: adSlash(I.start), elapsed: el ? el + ' ' : '', remain: el && I.dur ? (I.dur - el) + ' ' : '', planEnd: adSlash(I.planEnd), actEnd: adSlash(p.info.actualEnd || ''),
+      changes: +I.changes ? I.changes : '', ext: I.ext, amount: I.amount ? '原契約:' + Number(String(I.amount).replace(/,/g, '')).toLocaleString('en-US') : '', plan: pct(d.plan), act: pct(d.act),
       x4a: d.x4a === 'undone' ? '□完成 ■未完成' : '■完成 □未完成', x4a2: '', x4b: s4.join('；'), x4b2: '',
       s1: s1.length ? s1 : ['無'], s2: lines(a.s2, 's2', d.x2), s3: lines(a.s3, 's3', d.x3), s5: lines(a.s5, 's5', d.x5)
     };
@@ -1938,17 +1941,18 @@
     var px = DR_TPL.w.map(function (w) { return Math.floor(w * 8 + 5); }), wpt = px.reduce(function (s, x) { return s + x; }, 0) * 0.75;
     var hpt = DR_TPL.rows.reduce(function (s, r) { return s + r.h; }, 0), PT = 25.4 / 72;
     var k = Math.min(184 / (wpt * PT), 277 / (hpt * PT));
-    return { k: k, cols: px.map(function (x) { return x * 0.75 * PT * k; }), rows: DR_TPL.rows.map(function (r) { return r.h * PT * k; }) };
+    /* 列高再乘 1.0436：依同事 Excel 實際列印的 PDF 量測校正（Excel 列高比換算值略高） */
+    return { k: k, cols: px.map(function (x) { return x * 0.75 * PT * k; }), rows: DR_TPL.rows.map(function (r) { return r.h * PT * k * 1.0436; }) };
   })();
   function drSheet(p, date) {
     var v = drValues(p, date), G = DR_GEO, BW = { 2: 0.45, 1: 0.25, 0.5: 0.12 };
-    var h = '<table class="dr-t"><colgroup>' + G.cols.map(function (w) { return '<col style="width:' + w.toFixed(2) + 'mm">'; }).join('') + '</colgroup>';
+    var h = '<table class="dr-t" style="width:' + G.cols.reduce(function (s, x) { return s + x; }, 0).toFixed(2) + 'mm"><colgroup>' + G.cols.map(function (w) { return '<col style="width:' + w.toFixed(2) + 'mm">'; }).join('') + '</colgroup>';
     DR_TPL.rows.forEach(function (r, ri) {
       h += '<tr style="height:' + G.rows[ri].toFixed(2) + 'mm">';
       r.cells.forEach(function (c) {
         var st = [], bd = c.bd || [0, 0, 0, 0], sides = ['left', 'right', 'top', 'bottom'];
         bd.forEach(function (b, i) { if (b) st.push('border-' + sides[i] + ':' + BW[b] + 'mm solid #000'); });
-        st.push('font-size:' + ((c.f || 12) * G.k).toFixed(2) + 'pt');
+        st.push('font-size:' + ((c.f || 12) * G.k * 1.0436).toFixed(2) + 'pt');
         if (c.b) st.push('font-weight:700');
         if (c.m) st.push("font-family:PMingLiU,MingLiU,'Songti TC','Noto Serif CJK TC',serif");
         st.push('text-align:' + (c.h === 'center' ? 'center' : c.h === 'right' ? 'right' : 'left'));
