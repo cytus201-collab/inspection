@@ -1637,9 +1637,11 @@
   }
   /* 公文字型：先用本機字型名稱（local()）；Chrome 等瀏覽器讀不到時，改讀取本機標楷體字型檔，存在這台裝置（不上傳） */
   var GW_PS = 'DFKaiShu-SB-Estd-BF', gwFontOk = null;
+  /* Windows：標楷體（DFKai-SB）；Mac：標楷體-繁（BiauKai TC，由字體簿下載） */
+  var GW_LOCAL = ['DFKaiShu-SB-Estd-BF', 'BiauKaiTC', 'BiauKaiTC-Regular', 'BiauKai TC', 'BiauKai TC Regular', '標楷體-繁', 'BiauKai', '標楷體', 'DFKai-SB', 'BiauKaiHK', 'BiauKai HK', '標楷體-港澳'].map(function (n) { return 'local("' + n + '")'; }).join(', ');
   function gwLocalOk() {
     if (!window.FontFace) return Promise.resolve(false);
-    return new FontFace('gw-kai-test', 'local("' + GW_PS + '"), local("BiauKai"), local("標楷體"), local("DFKai-SB")').load().then(function () { return true; }, function () { return false; });
+    return new FontFace('gw-kai-test', GW_LOCAL).load().then(function () { return true; }, function () { return false; });
   }
   function gwUseBuf(buf) {
     var face = new FontFace('GW Kai', sfntFrom(buf, GW_PS));
@@ -1704,8 +1706,9 @@
   }
   document.addEventListener('click', function (e) {
     if (e.target.id !== 'gwFontQuery') return;
-    window.queryLocalFonts({ postscriptNames: [GW_PS] }).then(function (list) {
-      var f = list.filter(function (x) { return x.postscriptName === GW_PS; })[0] || list[0];
+    window.queryLocalFonts().then(function (list) {
+      var hit = function (re) { return list.filter(function (x) { return re.test(x.postscriptName + ' ' + x.fullName + ' ' + x.family); })[0]; };
+      var f = hit(/DFKaiShu|DFKai-SB/) || hit(/BiauKaiTC|BiauKai TC|標楷體-繁/) || hit(/BiauKai|標楷體/);
       if (!f) throw new Error('none');
       return f.blob().then(function (b) { return b.arrayBuffer(); }).then(gwSaveBuf);
     }).catch(function () { $('gwFontBar').insertAdjacentHTML('beforeend', '<b class="sum-ng">讀取失敗（可能未允許或在共編版的框架內無法使用），請改用「選擇標楷體字型檔」。</b>'); });
