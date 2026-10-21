@@ -783,3 +783,11 @@ button.kpi{cursor:pointer}
 .progress-bar{border:1px solid var(--hair)}
 .sync-pill{border:1px solid var(--hair);border-radius:999px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 @media (max-width:960px){.sync-pill{bottom:76px}}
+/* v52：卡片內容不撐破版面、手機鎖定寬度、公司圖標 */
+.card>*,.ov-card>*,.doc-list,.doc-row,.head-row>*{min-width:0}
+.head-row .h{flex:1 1 auto}
+.rail-logo{background:transparent!important;padding:0}
+.rail-logo svg{width:38px;height:38px;display:block}
+@media (max-width:960px){html,body{overflow-x:hidden;max-width:100%}.view{max-width:100vw}}
+.fd-proj select{max-width:100%;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.doc-t b,.doc-t small{display:block;max-width:100%}
