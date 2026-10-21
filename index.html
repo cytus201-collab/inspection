@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=50">
+<link rel="stylesheet" href="style.css?v=51">
 </head>
 <body>
 
@@ -24,16 +24,44 @@
   </div>
 </header>
 
-<!-- ===== 1 工程清單 ===== -->
-<main id="vProjects" class="view wrap" hidden>
-  <div class="head-row">
-    <h2 class="h">工程清單</h2>
-    <nav class="mode-switch" aria-label="切換版本"><a id="msPersonal" title="個人版：資料只存在這台裝置">個人</a><a id="msCo" title="共編版：資料存在雲端，可與同事共用">共編</a></nav>
-    <button type="button" class="btn primary sm" id="btnNewProject">＋ 新增工程</button>
+<nav class="rail noprint" id="rail" aria-label="主選單">
+  <div class="rail-logo" aria-hidden="true">監</div>
+  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
+  <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
+  <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>工程</button>
+  <button type="button" data-nav="docs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></svg>公文</button>
+  <button type="button" data-nav="daily"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日報</button>
+  <button type="button" data-nav="materials"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>材料</button>
+  <button type="button" data-nav="settings" class="rail-end"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>設定</button>
+</nav>
+<nav class="tabs noprint" id="tabs" aria-label="底部導覽">
+  <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
+  <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日曆</button>
+  <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>工項</button>
+  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
+</nav>
+
+<!-- ===== 1 總覽（辦公室） ===== -->
+<main id="vProjects" class="view wrap wide" hidden>
+  <div class="ov-head">
+    <div class="ov-title"><h2 class="h">總覽</h2><p class="muted" id="ovDate"></p></div>
+    <div class="ui-mode" role="group" aria-label="模式"><button type="button" class="on" data-mode="office">辦公室</button><button type="button" data-mode="field">現場</button></div>
   </div>
-  <div id="projectList" class="list"></div>
-  <section class="card quiet" aria-labelledby="h-backup">
-    <h2 class="h small" id="h-backup">資料備份</h2>
+  <section class="ov-kpi" id="ovKpi" aria-label="摘要"></section>
+  <div class="ov-grid">
+    <section class="card ov-card" aria-labelledby="h-ovp">
+      <div class="ov-card-h"><h2 class="h small" id="h-ovp">工程</h2><button type="button" class="btn ghost sm" id="btnNewProject">＋ 新增工程</button></div>
+      <div id="projectList" class="ov-table"></div>
+    </section>
+    <section class="card ov-card" aria-labelledby="h-ovd">
+      <div class="ov-card-h"><h2 class="h small" id="h-ovd">近 7 天</h2><div class="cal-filter" id="ovDueF" role="group" aria-label="篩選"></div></div>
+      <ul class="ov-due" id="ovDue"></ul>
+    </section>
+  </div>
+  <section class="ov-quick" id="ovQuick" aria-label="快速動作"></section>
+  <section class="card quiet" id="ovSettings" aria-labelledby="h-backup">
+    <div class="ov-card-h"><h2 class="h small" id="h-backup">設定與資料</h2>
+      <nav class="mode-switch" aria-label="切換版本"><a id="msPersonal" title="個人版：資料只存在這台裝置">個人版</a><a id="msCo" title="共編版：資料存在雲端，可與同事共用">共編版</a></nav></div>
     <p class="muted" id="backupNote">資料只存在這台裝置的瀏覽器裡。換手機或清除瀏覽器資料前，請先匯出備份。</p>
     <div class="btn-row">
       <button type="button" class="btn ghost sm" id="btnExport">匯出備份檔</button>
@@ -43,20 +71,39 @@
     <p class="muted" id="storeInfo"></p>
   </section>
   <details class="trash" id="trashBoxP" hidden>
-    <summary>🗑 最近刪除 <span class="tr-n"></span></summary>
+    <summary>最近刪除 <span class="tr-n"></span></summary>
     <p class="muted">刪除的項目保留 7 天，期限到了會自動永久刪除。</p>
     <ul class="day-list"></ul>
     <p class="muted" id="trashMsgP" role="status"></p>
   </details>
 </main>
 
+<!-- ===== 今日現場 ===== -->
+<main id="vField" class="view wrap" hidden>
+  <div class="ov-head">
+    <div class="ov-title"><p class="muted" id="fdDate"></p><h2 class="h">今日現場</h2></div>
+    <div class="ui-mode" role="group" aria-label="模式"><button type="button" data-mode="office">辦公室</button><button type="button" class="on" data-mode="field">現場</button></div>
+  </div>
+  <label class="fd-proj"><span class="sr">目前工程</span><select id="fdProj"></select><small id="fdProjSub"></small></label>
+  <section class="fd-plan" id="fdPlan" aria-label="預定抽查"></section>
+  <div class="fd-two" id="fdTwo"></div>
+  <section aria-labelledby="h-fq"><h2 class="h small" id="h-fq">快速動作</h2>
+    <div class="fd-quick">
+      <button type="button" data-fq="rec"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>開始抽查</button>
+      <button type="button" data-fq="mat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4"/></svg>材料進場</button>
+      <button type="button" data-fq="plan"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M12 13v4M10 15h4"/></svg>新增預定</button>
+    </div>
+  </section>
+  <section aria-labelledby="h-fd"><h2 class="h small" id="h-fd">今天已完成</h2><div class="fd-done" id="fdDone"></div></section>
+</main>
+
 <!-- ===== 2 工程：兩個目錄 + 基本資料 ===== -->
 <main id="vProject" class="view wrap wide" hidden>
   <section class="card cal" id="calCard" aria-labelledby="calTitle">
     <div class="cal-acts">
-      <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表">📋 總表／缺失</button>
-      <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文">📨 公文</button>
-      <button type="button" class="btn ghost sm" id="btnDaily" title="公共工程監造報表（日曆天每日一張）">📝 日報</button>
+      <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3H8z"/><path d="M6 6H4v15h16V6h-2"/><path d="M8 12h8M8 16h5"/></svg>總表／缺失</button>
+      <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></svg>公文</button>
+      <button type="button" class="btn ghost sm" id="btnDaily" title="公共工程監造報表（日曆天每日一張）"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日報</button>
     </div>
     <div class="cal-head">
       <button type="button" class="btn ghost sm" id="calPrev" aria-label="上個月">‹</button>
@@ -100,7 +147,7 @@
     </div>
   </details>
   <details class="trash" id="trashBox" hidden>
-    <summary>🗑 最近刪除 <span class="tr-n"></span></summary>
+    <summary>最近刪除 <span class="tr-n"></span></summary>
     <p class="muted">刪除的項目保留 7 天，期限到了會自動永久刪除。</p>
     <ul class="day-list"></ul>
     <p class="muted" id="trashMsg" role="status"></p>
@@ -128,7 +175,7 @@
       <label class="f">檢查位置<input id="location" placeholder="例：3F 會議室東側"></label>
       <label class="f">檢查日期<input id="checkDate" type="date"></label>
     </div>
-    <div class="pin-row"><button type="button" class="btn ghost sm" id="btnPin">📍 在圖說標記抽查位置</button><span class="muted" id="pinInfo"></span></div>
+    <div class="pin-row"><button type="button" class="btn ghost sm" id="btnPin">在圖說標記抽查位置</button><span class="muted" id="pinInfo"></span></div>
   </section>
 
   <section class="card" id="irrPicker" hidden aria-labelledby="h-pick">
@@ -524,9 +571,9 @@
   </div>
 </div>
 
-<script src="data.js?v=50"></script>
-<script src="mat-parse.js?v=50"></script>
-<script src="cloud.js?v=50"></script>
-<script src="app.js?v=50"></script>
+<script src="data.js?v=51"></script>
+<script src="mat-parse.js?v=51"></script>
+<script src="cloud.js?v=51"></script>
+<script src="app.js?v=51"></script>
 </body>
 </html>

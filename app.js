@@ -223,7 +223,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit', 'vField'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -261,7 +261,7 @@
   function render() {
     purgeDrafts(); purgeTrash();
     var p = cur.pid && proj(cur.pid), w = cur.wid && WORK[cur.wid];
-    if (cur.v !== 'projects' && !p) cur = { v: 'projects' };
+    if (!/^(projects|field)$/.test(cur.v) && !p) cur = { v: 'projects' };
     else if (/^(work|form|preview)$/.test(cur.v) && !w) cur = { v: 'project', pid: cur.pid };
     else if (/^(form|preview)$/.test(cur.v) && !recById(p, cur.wid, cur.rid)) cur = { v: 'work', pid: cur.pid, wid: cur.wid };
     else if (cur.v === 'matItem' && !matById(p, cur.mid)) cur = { v: 'materials', pid: cur.pid };
@@ -276,9 +276,9 @@
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
-      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint
+      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint, field: renderField
     })[cur.v]();
-    coEdit();
+    coEdit(); markNav();
     if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
   }
   /* 共編：同一張表有同事開著時顯示提醒 */
@@ -315,26 +315,154 @@
     if (u && /^https:\/\/script\.google\.com\//.test(u.trim())) { try { localStorage.setItem('coedit-url', u.trim()); } catch (er) {} location.href = u.trim(); }
   });
   $('msPersonal').addEventListener('click', function (e) { if (!IS_CO) e.preventDefault(); });
+  /* ========== 辦公室／現場兩種模式、導覽列 ========== */
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function uiMode() { return lsGet('ui-mode') || (window.matchMedia && window.matchMedia('(max-width: 760px)').matches ? 'field' : 'office'); }
+  function curProj() { var id = cur.pid || lsGet('last-pid'); return (id && proj(id)) || S.projects[0] || null; }
+  function wkStart(d) { var t = new Date(d + 'T00:00:00'), w = (t.getDay() + 6) % 7; return addDays(d, -w); }
+  function projDay(p, dt) { var I = drInfo(p); return I.start ? drDays(I.start, dt) + 1 : 0; }
+  function lastAct(p) { var xs = dailies(p).filter(function (d) { return d.act !== '' && d.act != null && d.date <= today(); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }); return xs.length ? +xs[0].act : null; }
+  /* 工期內：開工日起，至實際完工日（未完工則持續，逾期也要每日填報） */
+  function inPeriod(p, dt) { var I = drInfo(p); return !!I.start && dt >= I.start && (!p.info.actualEnd || dt <= p.info.actualEnd); }
+  function plansOn(p, dt) { return (p.plans || []).filter(function (pl) { return pl.date === dt && !(pl.rid && recById(p, pl.wid, pl.rid) && !recById(p, pl.wid, pl.rid).draft); }); }
+  function openDefs(p) { return sumData(p, '9999-12-31').defs.filter(function (x) { return x.st !== 'fixed'; }); }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-mode]'); if (!b) return;
+    lsSet('ui-mode', b.dataset.mode); go({ v: b.dataset.mode === 'field' ? 'field' : 'projects' });
+  });
+  function navTo(k) {
+    var p = curProj();
+    if (k === 'office') return go({ v: 'projects' });
+    if (k === 'settings') { go({ v: 'projects' }); setTimeout(function () { $('ovSettings').scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (k === 'field') return go({ v: 'field' });
+    if (!p) return go({ v: 'projects' });
+    if (k === 'project') return go({ v: 'project', pid: p.id });
+    if (k === 'works') { go({ v: 'project', pid: p.id }); setTimeout(function () { var g = $('workGrid'); if (g) g.scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (k === 'docs') return go({ v: 'docs', pid: p.id });
+    if (k === 'daily') return go({ v: 'daily', pid: p.id, ym: today().slice(0, 7) });
+    if (k === 'materials') return go({ v: 'materials', pid: p.id });
+  }
+  ['rail', 'tabs'].forEach(function (id) { $(id).addEventListener('click', function (e) { var b = e.target.closest('[data-nav]'); if (b) navTo(b.dataset.nav); }); });
+  function markNav() {
+    var v = cur.v, k = v === 'projects' ? 'office' : v === 'field' ? 'field' : /^doc/.test(v) ? 'docs' : /^daily/.test(v) ? 'daily' : /^mat/.test(v) ? 'materials' : 'project';
+    document.querySelectorAll('#rail [data-nav], #tabs [data-nav]').forEach(function (b) { b.classList.toggle('on', b.dataset.nav === k); });
+    if (cur.pid) lsSet('last-pid', cur.pid);
+  }
+  function startPlan(p, plid) {
+    var pl = plan(p, plid), w2 = pl && WORK[pl.wid]; if (!w2) return;
+    var r = newRecord(p, w2, w2.kind === 'phased' ? pl.phase : 0, { checkDate: pl.date, location: pl.note || '' });
+    pl.rid = r.id; save(); go({ v: 'form', pid: p.id, wid: w2.id, rid: r.id });
+  }
+  /* ---- 辦公室總覽 ---- */
+  var ovFilter = 'all';
   function renderProjects() {
     renderSwitch();
-    topbar('監造抽查紀錄', '室內裝修工程 · 表單版次 ' + D.version);
-    var html = S.projects.map(function (p) {
-      var n = 0, ng = 0;
-      Object.keys(p.recs).forEach(function (wid) {
-        (p.recs[wid] || []).forEach(function (r) { n++; if (WORK[wid] && stats(WORK[wid], r).ng) ng++; });
-      });
-      var mt = p.mats.length, md = p.mats.filter(function (m) { return m.inspResult; }).length;
-      var meta = [p.info.contractor, p.info.startDate && '開工 ' + p.info.startDate, mt && '材料抽查 ' + md + '/' + mt].filter(Boolean).join(' · ') || '尚未填寫基本資料';
-      return '<button type="button" class="row-btn" data-pid="' + p.id + '"><span class="rb-main"><span class="rb-title">' +
-        esc(p.info.name || '未命名工程') + '</span><span class="rb-meta">' + esc(meta) + '</span></span>' +
-        '<span class="rb-right">' + n + ' 份' + (ng ? '<span class="badge-ng">' + ng + ' 缺失</span>' : '') + '</span><span class="chev">›</span></button>';
+    topbar('監造抽查紀錄', '辦公室總覽 · 表單版次 ' + D.version);
+    var td = today(), ws = wkStart(td), we = addDays(ws, 6), ym = td.slice(0, 7), wd = '日一二三四五六'[new Date(td + 'T00:00:00').getDay()];
+    $('ovDate').textContent = rocYmd(td) + ' 星期' + wd;
+    var act = 0, late = 0, recW = 0, planW = 0, drDone = 0, drNeed = 0, defN = 0, defNext = '';
+    var rows = S.projects.map(function (p) {
+      var I = drInfo(p), day = projDay(p, td), total = I.dur ? I.dur + (+I.ext || 0) : 0, live = !p.info.actualEnd;
+      if (live) act++; if (I.start && total && day > total && !p.info.actualEnd) late++;
+      Object.keys(p.recs || {}).forEach(function (wid) { (p.recs[wid] || []).forEach(function (r) { if (!r.draft && r.checkDate >= ws && r.checkDate <= we) recW++; }); });
+      planW += (p.plans || []).filter(function (pl) { return pl.date >= ws && pl.date <= we && !pl.rid; }).length;
+      monthDays(ym).forEach(function (dt) { if (dt <= td && inPeriod(p, dt)) { drNeed++; if (dailyOf(p, dt)) drDone++; } });
+      var defs = openDefs(p); defN += defs.length;
+      defs.forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && (!defNext || dl < defNext)) defNext = dl; });
+      var chips = [];
+      if (inPeriod(p, td) && !dailyOf(p, td)) chips.push('<span class="chip-k dark">日報未填</span>');
+      var pn = plansOn(p, td).length; if (pn) chips.push('<span class="chip-k">預定抽查 ' + pn + '</span>');
+      if (defs.length) chips.push('<span class="chip-k">缺失 ' + defs.length + '</span>');
+      var a = lastAct(p);
+      return '<button type="button" class="ov-row" data-pid="' + p.id + '"><span class="ov-n"><b>' + esc(p.info.name || '未命名工程') + '</b><small>' + esc([p.docCfg && p.docCfg.caseNo ? '案號 ' + p.docCfg.caseNo : '', p.info.contractor].filter(Boolean).join('・') || '尚未填寫基本資料') + '</small></span>' +
+        '<span class="ov-d">' + (day ? '第 ' + day + ' 天' + (total ? ' / ' + total : '') : '—') + '</span>' +
+        '<span class="ov-p">' + (a != null ? '<i class="bar"><i style="width:' + Math.min(100, a) + '%"></i></i>' + a.toFixed(1) + '%' : '<span class="muted">—</span>') + '</span>' +
+        '<span class="ov-c">' + (chips.join('') || '<span class="muted">無待辦</span>') + '</span></button>';
     }).join('');
-    $('projectList').innerHTML = html || '<div class="empty">還沒有工程。按「新增工程」建立第一個，填入基本資料後即可開始抽查。</div>';
+    var tile = function (k, v, s, dark) { return '<div class="kpi' + (dark ? ' dark' : '') + '"><span>' + k + '</span><b>' + v + '</b><small>' + s + '</small></div>'; };
+    $('ovKpi').innerHTML = tile('進行中工程', act, late ? late + ' 件已逾工期' : '皆在工期內') + tile('本週抽查', recW, '已完成 ' + recW + '・預定 ' + planW) +
+      tile('本月日報', drDone + '<em> / ' + drNeed + '</em>', drNeed - drDone ? (drNeed - drDone) + ' 天未填' : '已全部填寫') + tile('未改善缺失', defN, defNext ? '最近期限 ' + (+defNext.slice(5, 7)) + '/' + (+defNext.slice(8)) : defN ? '未設期限' : '無', true);
+    $('projectList').innerHTML = rows ? '<div class="ov-th"><span>工程名稱</span><span>工期</span><span>實際進度</span><span>今日</span></div>' + rows : '<div class="empty">還沒有工程。按「新增工程」建立第一個。</div>';
+    /* 近 7 天：會議、發文、缺失期限、預定抽查 */
+    var due = [], end = addDays(td, 7);
+    S.projects.forEach(function (p) {
+      var nm = (p.info.name || '').replace(/新竹市|政府|工程$/g, '').slice(0, 14);
+      (p.docs || []).forEach(function (d) {
+        if (d.kind === 'meet' && d.meet && d.meet.time && d.meet.time.slice(0, 10) >= td && d.meet.time.slice(0, 10) <= end) due.push({ dt: d.meet.time.slice(0, 10), k: 'doc', t: '會議：' + shortSubj(d) + ' ' + d.meet.time.slice(11, 16), s: nm + '・' + (d.meet.place || ''), go: { v: 'docEdit', pid: p.id, did: d.id } });
+        else if (d.date >= td && d.date <= end) due.push({ dt: d.date, k: 'doc', t: '發文：' + shortSubj(d), s: nm + '・' + d.no, go: { v: 'docEdit', pid: p.id, did: d.id } });
+      });
+      openDefs(p).forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && dl <= end) due.push({ dt: dl, k: 'ng', t: '缺失改善期限：' + x.name, s: nm + '・' + (x.loc || ''), late: dl < td, go: x.r && x.w ? { v: 'form', pid: p.id, wid: x.w.id, rid: x.r.id } : { v: 'project', pid: p.id } }); });
+      (p.plans || []).forEach(function (pl) { if (!pl.rid && pl.date >= td && pl.date <= end) { var w = WORK[pl.wid]; due.push({ dt: pl.date, k: 'rec', t: '預定抽查：' + (w ? workLabel(w, pl.phase || 0) : ''), s: nm + (pl.note ? '・' + pl.note : ''), go: { v: 'project', pid: p.id } }); } });
+    });
+    due.sort(function (a, b) { return a.dt < b.dt ? -1 : 1; });
+    ovDueItems = due;
+    $('ovDueF').innerHTML = [['all', '全部'], ['doc', '公文'], ['ng', '缺失'], ['rec', '抽查']].map(function (f) { return '<button type="button" class="cf' + (ovFilter === f[0] ? ' on' : '') + '" data-of="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+    var shown = due.filter(function (x) { return ovFilter === 'all' || x.k === ovFilter; });
+    $('ovDue').innerHTML = shown.length ? shown.map(function (x) {
+      var i = due.indexOf(x);
+      return '<li><button type="button" data-due="' + i + '"><span class="dd' + (x.k === 'ng' ? ' dark' : '') + '">' + (+x.dt.slice(5, 7)) + '/' + (+x.dt.slice(8)) + '</span><span class="dt"><b>' + esc(x.t) + '</b><small>' + esc(x.s) + '</small></span></button></li>';
+    }).join('') : '<li class="muted ov-none">近 7 天沒有期限或會議。</li>';
+    var p0 = curProj();
+    $('ovQuick').innerHTML = p0 ? '<span class="muted">目前工程：' + esc(p0.info.name || '未命名') + '</span><button type="button" class="btn ghost sm" data-oq="docs">＋ 發文</button><button type="button" class="btn ghost sm" data-oq="dailyPrint">整月日報列印</button><button type="button" class="btn ghost sm" data-oq="sum">抽查總表／缺失管制</button><button type="button" class="btn ghost sm" data-oq="materials">材料管制</button>' : '';
     $('backupMsg').textContent = saveMsg;
     renderTrash('trashBoxP', S.trash); $('trashMsgP').textContent = '';
     storeInfo();
     show('vProjects');
   }
+  var ovDueItems = [];
+  $('ovDueF').addEventListener('click', function (e) { var b = e.target.closest('[data-of]'); if (b) { ovFilter = b.dataset.of; renderProjects(); } });
+  $('ovDue').addEventListener('click', function (e) { var b = e.target.closest('[data-due]'); if (b) go(ovDueItems[+b.dataset.due].go); });
+  $('ovQuick').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-oq]'), p = curProj(); if (!b || !p) return;
+    var k = b.dataset.oq;
+    if (k === 'docs') go({ v: 'docs', pid: p.id });
+    if (k === 'dailyPrint') go({ v: 'dailyPrint', pid: p.id, ym: today().slice(0, 7) });
+    if (k === 'sum') { var t = today(); go({ v: 'sumPrint', pid: p.id, to: t, from: sumFromDef(t), kind: 'ng' }); }
+    if (k === 'materials') go({ v: 'materials', pid: p.id });
+  });
+  /* ---- 今日現場 ---- */
+  function renderField() {
+    var p = curProj(), td = today();
+    topbar('監造抽查紀錄', '現場模式', '');
+    $('fdDate').textContent = (+td.slice(5, 7)) + '/' + (+td.slice(8)) + ' 星期' + '日一二三四五六'[new Date(td + 'T00:00:00').getDay()];
+    $('fdProj').innerHTML = S.projects.map(function (x) { return '<option value="' + x.id + '"' + (p && x.id === p.id ? ' selected' : '') + '>' + esc(x.info.name || '未命名工程') + '</option>'; }).join('');
+    if (!p) { $('fdPlan').innerHTML = '<div class="empty">還沒有工程。請先到「總覽」新增工程。</div>'; $('fdTwo').innerHTML = ''; $('fdDone').innerHTML = ''; show('vField'); return; }
+    var a = lastAct(p), day = projDay(p, td);
+    $('fdProjSub').textContent = [day ? '第 ' + day + ' 天' : '', a != null ? '實際 ' + a.toFixed(1) + '%' : ''].filter(Boolean).join('・');
+    var pls = plansOn(p, td);
+    $('fdPlan').innerHTML = '<div class="fd-plan-h"><span>今日預定抽查</span><b>' + pls.length + '</b></div>' + (pls.length ? pls.map(function (pl) {
+      var w = WORK[pl.wid];
+      return '<div class="fd-pl"><span><b>' + esc(w ? workLabel(w, pl.phase || 0) : '抽查') + '</b><small>' + esc([pl.note, pl.time].filter(Boolean).join('・')) + '</small></span><button type="button" data-fstart="' + pl.id + '">開始抽查</button></div>';
+    }).join('') : '<p class="fd-none">今天沒有預定抽查。</p>');
+    var defs = openDefs(p), dl = ''; defs.forEach(function (x) { var d2 = defInfo(x, td).dl; if (d2 && (!dl || d2 < dl)) dl = d2; });
+    var dr = dailyOf(p, td), au = drAuto(p, td), cnt = au.s2.length + au.s3.length + au.s4.length + au.s5.length;
+    $('fdTwo').innerHTML = '<button type="button" class="kpi" data-fgo="ng"><span>未改善缺失</span><b>' + defs.length + '</b><small>' + (dl ? '期限 ' + (+dl.slice(5, 7)) + '/' + (+dl.slice(8)) : defs.length ? '未設期限' : '無') + '</small></button>' +
+      '<button type="button" class="kpi" data-fgo="daily"><span>今日日報</span><b class="sm">' + (dr ? '已填' : inPeriod(p, td) ? '未填' : '—') + '</b><small>' + (cnt ? '已帶入 ' + cnt + ' 筆' : '尚無自動帶入') + '</small></button>';
+    var tag = { rec: '抽查', mat: '材料', doc: '公文', meet: '會議', daily: '日報' };
+    var done = calEvents(p).filter(function (x) { return x.date === td && x.kind !== 'plan'; });
+    $('fdDone').innerHTML = done.length ? done.map(function (x) {
+      var go2 = x.rid ? ' data-openrec="' + x.wid + '|' + x.rid + '"' : x.did ? ' data-opendoc="' + x.did + '"' : x.drd ? ' data-opendr="' + x.drd + '"' : ' data-openmat="' + x.mid + '"';
+      return '<button type="button" class="fd-row"' + go2 + '><span class="chip-k">' + (tag[x.kind] || '') + '</span><span class="fd-t">' + esc(x.label) + '</span>' + (x.ng ? '<span class="fd-ng">缺失</span>' : '') + '<span class="chev">›</span></button>';
+    }).join('') : '<p class="muted fd-empty">今天還沒有紀錄。</p>';
+    show('vField');
+  }
+  $('fdProj').addEventListener('change', function () { lsSet('last-pid', $('fdProj').value); renderField(); });
+  $('vField').addEventListener('click', function (e) {
+    var p = curProj(), b = e.target.closest('button'); if (!p || !b) return;
+    var ds = b.dataset;
+    if (ds.fstart) return startPlan(p, ds.fstart);
+    if (ds.fgo === 'ng') { var t = today(); return go({ v: 'sumPrint', pid: p.id, to: t, from: sumFromDef(t), kind: 'ng' }); }
+    if (ds.fgo === 'daily') return go({ v: 'dailyEdit', pid: p.id, date: today() });
+    if (ds.fq === 'rec') { go({ v: 'project', pid: p.id }); setTimeout(function () { var g = $('workGrid'); if (g) g.scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (ds.fq === 'mat') return go({ v: 'materials', pid: p.id });
+    if (ds.fq === 'plan') { calSel = today(); var d0 = new Date(); calY = d0.getFullYear(); calM = d0.getMonth(); go({ v: 'project', pid: p.id }); setTimeout(function () { var pa = document.querySelector('#calDay .plan-add'); if (pa) { pa.open = true; pa.scrollIntoView({ block: 'center' }); } }, 40); return; }
+    if (ds.openrec) { var a2 = ds.openrec.split('|'); return go({ v: 'form', pid: p.id, wid: a2[0], rid: a2[1] }); }
+    if (ds.opendoc) return go({ v: 'docEdit', pid: p.id, did: ds.opendoc });
+    if (ds.opendr) return go({ v: 'dailyEdit', pid: p.id, date: ds.opendr });
+    if (ds.openmat) return go({ v: 'matItem', pid: p.id, mid: ds.openmat });
+  });
+
   $('projectList').addEventListener('click', function (e) {
     var b = e.target.closest('[data-pid]'); if (b) go({ v: 'project', pid: b.dataset.pid });
   });
@@ -403,7 +531,7 @@
   }
   function renderProject() {
     var p = proj(cur.pid), I = p.info;
-    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '工程清單');
+    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '總覽');
     var on = enabledWorks(p);
     $('workPick').innerHTML = orderedWorks(p).map(function (w) {
       return '<label class="chk"><input type="checkbox" data-wsel="' + w.id + '"' + (on.indexOf(w) >= 0 ? ' checked' : '') + '><span>' + esc(w.name) + '</span></label>';
@@ -1508,7 +1636,7 @@
     $('docList').innerHTML = list.length ? list.map(function (d) {
       var t = d.kind === 'meet' ? '開會通知單：' + (d.meet && d.meet.reason || '') : d.subj || '';
       return '<button type="button" class="doc-row" data-doc="' + d.id + '"><span class="doc-d">' + roc(d.date, '.') + '</span><span class="doc-t"><b>' + esc(t || '（未填主旨）') + '</b><small>' + esc(d.no) + (d.to ? ' · ' + esc(d.to) : '') + '</small></span>' +
-        (d.fileId ? '<span class="doc-ok" title="已歸檔到雲端">☁</span>' : '') + '<span class="chev">›</span></button>';
+        (d.fileId ? '<span class="doc-ok" title="已歸檔到雲端">已歸檔</span>' : '') + '<span class="chev">›</span></button>';
     }).join('') : '<div class="empty">尚無發文。按上方「＋ 函」或「＋ 開會通知單」開始。</div>';
     show('vDocs');
   }
@@ -1985,7 +2113,7 @@
   function monthDays(ym) { var a = ym.split('-'), n = new Date(+a[0], +a[1], 0).getDate(), out = []; for (var i = 1; i <= n; i++) out.push(ym + '-' + ('0' + i).slice(-2)); return out; }
   function drRange(p, ym) {
     var I = drInfo(p);
-    return monthDays(ym).filter(function (d) { return (!I.start || d >= I.start) && (!I.planEnd || d <= addDays(I.planEnd, +I.ext || 0) || dailyOf(p, d)); });
+    return monthDays(ym).filter(function (d) { return (!I.start || d >= I.start) && (!p.info.actualEnd || d <= p.info.actualEnd || dailyOf(p, d)) && (d <= today() || dailyOf(p, d) || !I.start); });
   }
   function renderDaily() {
     var p = proj(cur.pid), ym = cur.ym || today().slice(0, 7), I = drInfo(p), a = ym.split('-');
@@ -2526,13 +2654,7 @@
     }
     if (ds.toggle) { calOpen = calOpen === ds.toggle ? null : ds.toggle; renderCal(p); return; }
     if (ds.delplan) { p.plans = p.plans.filter(function (x) { return x.id !== ds.delplan; }); save(); renderCal(p); return; }
-    if (ds.start) {
-      var pl = plan(p, ds.start), w2 = WORK[pl.wid];
-      if (!w2) return;
-      var r = newRecord(p, w2, w2.kind === 'phased' ? pl.phase : 0, { checkDate: pl.date, location: pl.note || '' });
-      pl.rid = r.id; save();
-      go({ v: 'form', pid: p.id, wid: w2.id, rid: r.id }); return;
-    }
+    if (ds.start) { startPlan(p, ds.start); return; }
     if (ds.openrec) { var a = ds.openrec.split('|'); go({ v: 'form', pid: p.id, wid: a[0], rid: a[1] }); return; }
     if (ds.openmat) go({ v: 'matItem', pid: p.id, mid: ds.openmat });
     if (ds.opendoc) go({ v: 'docEdit', pid: p.id, did: ds.opendoc });
@@ -3283,7 +3405,7 @@
     try { gwFontCheck(); } catch (e) {}
     S.projects.forEach(function (p) { if (!p.mats) p.mats = []; });
     migrateBoot();
-    go({ v: 'projects' }, true);
+    go({ v: uiMode() === 'field' ? 'field' : 'projects' }, true);
     if (window.Cloud) window.Cloud.init();
   }
   (idbOK ? IDB.get('state:v1').then(function (txt) {
