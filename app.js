@@ -2206,8 +2206,8 @@
       });
     });
     (p.docs || []).forEach(function (d) {
-      if (d.date) ev.push({ date: d.date, kind: 'doc', label: '發文：' + (d.kind === 'meet' ? '開會通知 ' + (d.meet.reason || '') : d.subj || d.no), sub: d.no, did: d.id });
-      if (d.kind === 'meet' && d.meet && d.meet.time) ev.push({ date: d.meet.time.slice(0, 10), kind: 'meet', label: '會議：' + (d.meet.reason || ''), sub: [d.meet.time.slice(11, 16), d.meet.place].filter(Boolean).join(' · '), did: d.id });
+      if (d.date) ev.push({ date: d.date, kind: 'doc', label: (d.kind === 'meet' ? '開會通知：' : '發文：') + shortSubj(d), sub: d.no, did: d.id });
+      if (d.kind === 'meet' && d.meet && d.meet.time) ev.push({ date: d.meet.time.slice(0, 10), kind: 'meet', label: '會議：' + shortSubj(d), sub: [d.meet.time.slice(11, 16), d.meet.place].filter(Boolean).join(' · '), did: d.id });
     });
     (p.mats || []).forEach(function (m) { if (m.arrivalDate) ev.push({ date: m.arrivalDate, kind: 'mat', label: '進場：' + (m.name || '材料'), sub: m.no || '', mid: m.id }); });
     (p.plans || []).forEach(function (pl) {
@@ -2220,7 +2220,9 @@
   function renderCal(p) {
     if (calY == null) { var t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); }
     $('calTitle').textContent = (calY - 1911) + ' 年 ' + (calM + 1) + ' 月（' + calY + '）';
-    var ev = calEvents(p), byDay = {};
+    var CF = { all: null, rec: ['rec'], plan: ['plan'], mat: ['mat'], doc: ['doc', 'meet'] };
+    var ev = calEvents(p).filter(function (e) { return !CF[calFilter] || CF[calFilter].indexOf(e.kind) >= 0; }), byDay = {};
+    $('calFilter').innerHTML = [['all', '全部'], ['rec', '抽查'], ['plan', '預定'], ['mat', '材料'], ['doc', '公文']].map(function (f) { return '<button type="button" class="cf' + (calFilter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
     ev.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
     var first = new Date(calY, calM, 1), start = new Date(calY, calM, 1 - first.getDay()), td = today(), cells = '';
     ['日', '一', '二', '三', '四', '五', '六'].forEach(function (d) { cells += '<div class="cal-wd">' + d + '</div>'; });
@@ -2229,13 +2231,22 @@
       var key = ymd(d), list = byDay[key] || [], other = d.getMonth() !== calM;
       if (i === 35 && other) break;
       cells += '<button type="button" class="cal-cell' + (other ? ' other' : '') + (key === td ? ' today' : '') + (key === calSel ? ' sel' : '') + '" data-day="' + key + '" aria-label="' + key + ' ' + list.length + ' 筆">' +
-        '<span class="cal-n">' + d.getDate() + '</span><span class="cal-evs">' +
-        list.slice(0, 3).map(function (e) { return evChip(e, true); }).join('') +
-        (list.length > 3 ? '<span class="cal-more">+' + (list.length - 3) + '</span>' : '') + '</span></button>';
+        '<span class="cal-n">' + d.getDate() + '</span><span class="cal-evs">' + calBadges(list) + '</span></button>';
     }
     $('calGrid').innerHTML = cells;
     renderCalDay(p, byDay[calSel] || []);
   }
+  /* 日曆格子只放各類數量徽章（抽／預／材／文／會），內容在點選當天後的清單 */
+  var calFilter = 'all';
+  var BADGE = [['rec', '抽'], ['plan', '預'], ['mat', '材'], ['doc', '文'], ['meet', '會']];
+  function calBadges(list) {
+    return BADGE.map(function (b) {
+      var xs = list.filter(function (e) { return e.kind === b[0]; }); if (!xs.length) return '';
+      var ng = xs.some(function (e) { return e.ng; }), over = xs.some(function (e) { return e.overdue; });
+      return '<span class="cb cb-' + b[0] + (ng ? ' cb-ng' : '') + (over ? ' cb-over' : '') + '" title="' + esc(xs.map(function (e) { return e.label; }).join('\n')) + '">' + b[1] + (xs.length > 1 ? xs.length : '') + (ng ? '!' : '') + '</span>';
+    }).join('');
+  }
+  $('calFilter').addEventListener('click', function (e) { var b = e.target.closest('[data-cf]'); if (!b) return; calFilter = b.dataset.cf; renderCal(proj(cur.pid)); });
   function evChip(e, small) {
     var cls = 'ev ev-' + e.kind + (e.ng ? ' ev-ng' : '') + (e.overdue ? ' ev-over' : '');
     var attr = e.plid ? ' data-plid="' + e.plid + '" draggable="true"' : '';

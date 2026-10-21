@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=47">
+<link rel="stylesheet" href="style.css?v=48">
 </head>
 <body>
 
@@ -53,14 +53,16 @@
 <!-- ===== 2 工程：兩個目錄 + 基本資料 ===== -->
 <main id="vProject" class="view wrap wide" hidden>
   <section class="card cal" id="calCard" aria-labelledby="calTitle">
+    <div class="cal-acts">
+      <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表">📋 總表／缺失</button>
+      <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文">📨 公文</button>
+    </div>
     <div class="cal-head">
       <button type="button" class="btn ghost sm" id="calPrev" aria-label="上個月">‹</button>
       <h2 class="h small" id="calTitle"></h2>
       <button type="button" class="btn ghost sm" id="calNext" aria-label="下個月">›</button>
       <button type="button" class="btn ghost sm" id="calToday">今天</button>
-      <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表">📋 總表／缺失</button>
-      <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文">📨 公文</button>
-      <span class="cal-legend"><i class="ev ev-rec"></i>已抽查 <i class="ev ev-plan"></i>預定 <i class="ev ev-mat"></i>材料進場 <i class="ev ev-doc"></i>公文</span>
+      <div class="cal-filter" id="calFilter" role="group" aria-label="篩選"></div>
     </div>
     <div class="cal-grid" id="calGrid" role="grid"></div>
     <div class="cal-day" id="calDay"></div>
@@ -508,9 +510,9 @@
   </div>
 </div>
 
-<script src="data.js?v=47"></script>
-<script src="mat-parse.js?v=47"></script>
-<script src="cloud.js?v=47"></script>
-<script src="app.js?v=47"></script>
+<script src="data.js?v=48"></script>
+<script src="mat-parse.js?v=48"></script>
+<script src="cloud.js?v=48"></script>
+<script src="app.js?v=48"></script>
 </body>
 </html>

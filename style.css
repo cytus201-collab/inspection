@@ -624,3 +624,23 @@ button,input,select,textarea{font:inherit;color:inherit}
 .gw-bar small{font-weight:400}
 .paper.gw-paper .gw-sheet.rec-sec{margin-top:6mm;border-top:1px dashed var(--line)}
 @media print{.paper.gw-paper .gw-sheet.rec-sec{margin-top:0;border-top:0;break-before:page}.paper.gw-paper .gw-sheet{break-inside:avoid}}
+
+/* v48 首頁日曆：徽章、篩選、按鈕列 */
+.cal-acts{display:flex;flex-wrap:wrap;gap:8px;grid-column:1/-1}
+.cal-filter{margin-left:auto;display:flex;gap:4px;flex-wrap:wrap}
+.cf{border:1.5px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.cf.on{background:var(--strong);color:var(--inv);border-color:var(--strong)}
+.cal-cell{min-height:72px}
+.cal-evs{flex-direction:row;flex-wrap:wrap;gap:3px}
+.cb{display:inline-block;font-size:11px;font-weight:700;line-height:16px;min-width:18px;padding:0 4px;border-radius:4px;text-align:center;white-space:nowrap}
+.cb-rec{background:var(--strong);color:var(--inv)}
+.cb-rec.cb-ng{background:#c62828;color:#fff}
+.cb-plan{border:1.5px dashed var(--strong);color:var(--ink);line-height:13px}
+.cb-plan.cb-over{border-style:solid;border-color:#c62828;color:#c62828}
+.cb-mat{background:var(--panel);color:var(--ink2);border:1px solid var(--line);line-height:14px}
+.cb-doc{background:#e8f1fa;color:#1d4a74;border:1px solid #3c6e9e;line-height:14px}
+.cb-meet{background:#3c6e9e;color:#fff}
+@media (max-width:600px){.cal-cell{min-height:52px}.cb{font-size:10px;min-width:14px;padding:0 2px;line-height:14px}.cal-filter{margin-left:0;width:100%}}
+.doc-t small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl-txt b{max-width:100%}
+@media (min-width:960px){.cal{grid-template-rows:auto auto 1fr}.cal-acts{grid-row:1}.cal-head{grid-row:2}.cal-grid{grid-row:3}.cal-day{grid-row:2/span 2}}
