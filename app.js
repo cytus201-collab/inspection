@@ -333,8 +333,8 @@
   });
   function navTo(k) {
     var p = curProj();
-    if (k === 'office') return go({ v: 'projects' });
-    if (k === 'settings') { go({ v: 'projects' }); setTimeout(function () { $('ovSettings').scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (k === 'office') return go({ v: 'projects', pid: p && p.id });
+    if (k === 'settings') { go({ v: 'projects', pid: p && p.id }); setTimeout(function () { $('ovSettings').scrollIntoView({ block: 'start' }); }, 30); return; }
     if (k === 'field') return go({ v: 'field' });
     if (!p) return go({ v: 'projects' });
     if (k === 'project') return go({ v: 'project', pid: p.id });
@@ -356,60 +356,58 @@
   }
   /* ---- 辦公室總覽 ---- */
   var ovFilter = 'all';
+  function projOpts(p) { return S.projects.map(function (x) { return '<option value="' + x.id + '"' + (p && x.id === p.id ? ' selected' : '') + '>' + esc(x.info.name || '未命名工程') + '</option>'; }).join(''); }
   function renderProjects() {
     renderSwitch();
-    topbar('監造抽查紀錄', '辦公室總覽 · 表單版次 ' + D.version);
+    topbar('監造抽查紀錄', '工程明細 · 表單版次 ' + D.version);
     var td = today(), ws = wkStart(td), we = addDays(ws, 6), ym = td.slice(0, 7), wd = '日一二三四五六'[new Date(td + 'T00:00:00').getDay()];
     $('ovDate').textContent = rocYmd(td) + ' 星期' + wd;
-    var act = 0, late = 0, recW = 0, planW = 0, drDone = 0, drNeed = 0, defN = 0, defNext = '';
-    var rows = S.projects.map(function (p) {
-      var I = drInfo(p), day = projDay(p, td), total = I.dur ? I.dur + (+I.ext || 0) : 0, live = !p.info.actualEnd;
-      if (live) act++; if (I.start && total && day > total && !p.info.actualEnd) late++;
+    var p = curProj();
+    $('ovProj').innerHTML = projOpts(p); $('ovProj').hidden = !p;
+    if (!p) {
+      $('ovQuick').innerHTML = ''; $('ovDueF').innerHTML = '';
+      $('ovKpi').innerHTML = '<div class="empty">還沒有工程。按「新增工程」建立第一個。</div>'; $('ovDue').innerHTML = '';
+    } else {
+      $('ovQuick').innerHTML = '<button type="button" class="btn ghost sm" data-oq="docs">＋ 發文</button><button type="button" class="btn ghost sm" data-oq="dailyPrint">整月日報列印</button><button type="button" class="btn ghost sm" data-oq="sum">抽查總表／缺失管制</button><button type="button" class="btn ghost sm" data-oq="materials">材料管制</button>';
+      var I = drInfo(p), day = projDay(p, td), total = I.dur ? I.dur + (+I.ext || 0) : 0, late = I.start && total && day > total && !p.info.actualEnd;
+      var recW = 0, planW = 0, drDone = 0, drNeed = 0, defNext = '';
       Object.keys(p.recs || {}).forEach(function (wid) { (p.recs[wid] || []).forEach(function (r) { if (!r.draft && r.checkDate >= ws && r.checkDate <= we) recW++; }); });
-      planW += (p.plans || []).filter(function (pl) { return pl.date >= ws && pl.date <= we && !pl.rid; }).length;
+      planW = (p.plans || []).filter(function (pl) { return pl.date >= ws && pl.date <= we && !pl.rid; }).length;
       monthDays(ym).forEach(function (dt) { if (dt <= td && inPeriod(p, dt)) { drNeed++; if (dailyOf(p, dt)) drDone++; } });
-      var defs = openDefs(p); defN += defs.length;
+      var defs = openDefs(p);
       defs.forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && (!defNext || dl < defNext)) defNext = dl; });
-      var chips = [];
-      if (inPeriod(p, td) && !dailyOf(p, td)) chips.push('<span class="chip-k dark">日報未填</span>');
-      var pn = plansOn(p, td).length; if (pn) chips.push('<span class="chip-k">預定抽查 ' + pn + '</span>');
-      if (defs.length) chips.push('<span class="chip-k">缺失 ' + defs.length + '</span>');
       var a = lastAct(p);
-      return '<button type="button" class="ov-row" data-pid="' + p.id + '"><span class="ov-n"><b>' + esc(p.info.name || '未命名工程') + '</b><small>' + esc([p.docCfg && p.docCfg.caseNo ? '案號 ' + p.docCfg.caseNo : '', p.info.contractor].filter(Boolean).join('・') || '尚未填寫基本資料') + '</small></span>' +
-        '<span class="ov-d">' + (day ? '第 ' + day + ' 天' + (total ? ' / ' + total : '') : '—') + '</span>' +
-        '<span class="ov-p">' + (a != null ? '<i class="bar"><i style="width:' + Math.min(100, a) + '%"></i></i>' + a.toFixed(1) + '%' : '<span class="muted">—</span>') + '</span>' +
-        '<span class="ov-c">' + (chips.join('') || '<span class="muted">無待辦</span>') + '</span></button>';
-    }).join('');
-    var tile = function (k, v, s, dark) { return '<div class="kpi' + (dark ? ' dark' : '') + '"><span>' + k + '</span><b>' + v + '</b><small>' + s + '</small></div>'; };
-    $('ovKpi').innerHTML = tile('進行中工程', act, late ? late + ' 件已逾工期' : '皆在工期內') + tile('本週抽查', recW, '已完成 ' + recW + '・預定 ' + planW) +
-      tile('本月日報', drDone + '<em> / ' + drNeed + '</em>', drNeed - drDone ? (drNeed - drDone) + ' 天未填' : '已全部填寫') + tile('未改善缺失', defN, defNext ? '最近期限 ' + (+defNext.slice(5, 7)) + '/' + (+defNext.slice(8)) : defN ? '未設期限' : '無', true);
-    $('projectList').innerHTML = rows ? '<div class="ov-th"><span>工程名稱</span><span>工期</span><span>實際進度</span><span>今日</span></div>' + rows : '<div class="empty">還沒有工程。按「新增工程」建立第一個。</div>';
-    /* 近 7 天：會議、發文、缺失期限、預定抽查 */
-    var due = [], end = addDays(td, 7);
-    S.projects.forEach(function (p) {
-      var nm = (p.info.name || '').replace(/新竹市|政府|工程$/g, '').slice(0, 14);
+      var tile = function (k, v, s, dark) { return '<div class="kpi' + (dark ? ' dark' : '') + '"><span>' + k + '</span><b>' + v + '</b><small>' + s + '</small></div>'; };
+      $('ovKpi').innerHTML =
+        tile('工期', day ? '第 ' + day + '<em> 天</em>' : '—', total ? (late ? '已逾工期（共 ' + total + ' 天）' : '共 ' + total + ' 天') : '未填開工日或工期') +
+        tile('實際進度', a != null ? a.toFixed(2) + '<em>%</em>' : '—', a != null ? '依施工日誌' : '尚無日報進度') +
+        tile('本週抽查', recW, '預定待抽查 ' + planW) +
+        tile('本月日報', drDone + '<em> / ' + drNeed + '</em>', drNeed - drDone ? (drNeed - drDone) + ' 天未填' : '已全部填寫') +
+        tile('未改善缺失', defs.length, defNext ? '最近期限 ' + (+defNext.slice(5, 7)) + '/' + (+defNext.slice(8)) : defs.length ? '未設期限' : '無', true);
+      /* 近 7 天：本工程的會議、發文、缺失期限、預定抽查 */
+      var due = [], end = addDays(td, 7);
       (p.docs || []).forEach(function (d) {
-        if (d.kind === 'meet' && d.meet && d.meet.time && d.meet.time.slice(0, 10) >= td && d.meet.time.slice(0, 10) <= end) due.push({ dt: d.meet.time.slice(0, 10), k: 'doc', t: '會議：' + shortSubj(d) + ' ' + d.meet.time.slice(11, 16), s: nm + '・' + (d.meet.place || ''), go: { v: 'docEdit', pid: p.id, did: d.id } });
-        else if (d.date >= td && d.date <= end) due.push({ dt: d.date, k: 'doc', t: '發文：' + shortSubj(d), s: nm + '・' + d.no, go: { v: 'docEdit', pid: p.id, did: d.id } });
+        if (d.kind === 'meet' && d.meet && d.meet.time && d.meet.time.slice(0, 10) >= td && d.meet.time.slice(0, 10) <= end) due.push({ dt: d.meet.time.slice(0, 10), k: 'doc', t: '會議：' + shortSubj(d) + ' ' + d.meet.time.slice(11, 16), s: d.meet.place || '', go: { v: 'docEdit', pid: p.id, did: d.id } });
+        else if (d.date >= td && d.date <= end) due.push({ dt: d.date, k: 'doc', t: '發文：' + shortSubj(d), s: d.no || '', go: { v: 'docEdit', pid: p.id, did: d.id } });
       });
-      openDefs(p).forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && dl <= end) due.push({ dt: dl, k: 'ng', t: '缺失改善期限：' + x.name, s: nm + '・' + (x.loc || ''), late: dl < td, go: x.r && x.w ? { v: 'form', pid: p.id, wid: x.w.id, rid: x.r.id } : { v: 'project', pid: p.id } }); });
-      (p.plans || []).forEach(function (pl) { if (!pl.rid && pl.date >= td && pl.date <= end) { var w = WORK[pl.wid]; due.push({ dt: pl.date, k: 'rec', t: '預定抽查：' + (w ? workLabel(w, pl.phase || 0) : ''), s: nm + (pl.note ? '・' + pl.note : ''), go: { v: 'project', pid: p.id } }); } });
-    });
-    due.sort(function (a, b) { return a.dt < b.dt ? -1 : 1; });
-    ovDueItems = due;
-    $('ovDueF').innerHTML = [['all', '全部'], ['doc', '公文'], ['ng', '缺失'], ['rec', '抽查']].map(function (f) { return '<button type="button" class="cf' + (ovFilter === f[0] ? ' on' : '') + '" data-of="' + f[0] + '">' + f[1] + '</button>'; }).join('');
-    var shown = due.filter(function (x) { return ovFilter === 'all' || x.k === ovFilter; });
-    $('ovDue').innerHTML = shown.length ? shown.map(function (x) {
-      var i = due.indexOf(x);
-      return '<li><button type="button" data-due="' + i + '"><span class="dd' + (x.k === 'ng' ? ' dark' : '') + '">' + (+x.dt.slice(5, 7)) + '/' + (+x.dt.slice(8)) + '</span><span class="dt"><b>' + esc(x.t) + '</b><small>' + esc(x.s) + '</small></span></button></li>';
-    }).join('') : '<li class="muted ov-none">近 7 天沒有期限或會議。</li>';
-    var p0 = curProj();
-    $('ovQuick').innerHTML = p0 ? '<span class="muted">目前工程：' + esc(p0.info.name || '未命名') + '</span><button type="button" class="btn ghost sm" data-oq="docs">＋ 發文</button><button type="button" class="btn ghost sm" data-oq="dailyPrint">整月日報列印</button><button type="button" class="btn ghost sm" data-oq="sum">抽查總表／缺失管制</button><button type="button" class="btn ghost sm" data-oq="materials">材料管制</button>' : '';
+      defs.forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && dl <= end) due.push({ dt: dl, k: 'ng', t: '缺失改善期限：' + x.name, s: x.loc || '', late: dl < td, go: x.r && x.w ? { v: 'form', pid: p.id, wid: x.w.id, rid: x.r.id } : { v: 'project', pid: p.id } }); });
+      (p.plans || []).forEach(function (pl) { if (!pl.rid && pl.date >= td && pl.date <= end) { var w = WORK[pl.wid]; due.push({ dt: pl.date, k: 'rec', t: '預定抽查：' + (w ? workLabel(w, pl.phase || 0) : ''), s: pl.note || '', go: { v: 'project', pid: p.id } }); } });
+      due.sort(function (x, y) { return x.dt < y.dt ? -1 : 1; });
+      ovDueItems = due;
+      $('ovDueF').innerHTML = [['all', '全部'], ['doc', '公文'], ['ng', '缺失'], ['rec', '抽查']].map(function (f) { return '<button type="button" class="cf' + (ovFilter === f[0] ? ' on' : '') + '" data-of="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+      var shown = due.filter(function (x) { return ovFilter === 'all' || x.k === ovFilter; });
+      $('ovDue').innerHTML = shown.length ? shown.map(function (x) {
+        var i = due.indexOf(x);
+        return '<li><button type="button" data-due="' + i + '"><span class="dd' + (x.k === 'ng' ? ' dark' : '') + '">' + (+x.dt.slice(5, 7)) + '/' + (+x.dt.slice(8)) + '</span><span class="dt"><b>' + esc(x.t) + '</b>' + (x.s ? '<small>' + esc(x.s) + '</small>' : '') + '</span></button></li>';
+      }).join('') : '<li class="muted ov-none">近 7 天沒有期限或會議。</li>';
+    }
     $('backupMsg').textContent = saveMsg;
     renderTrash('trashBoxP', S.trash); $('trashMsgP').textContent = '';
     storeInfo();
     show('vProjects');
   }
+  $('ovProj').addEventListener('change', function () { lsSet('last-pid', this.value); go({ v: 'projects', pid: this.value }, true); });
+  $('pjSel').addEventListener('change', function () { lsSet('last-pid', this.value); go({ v: 'project', pid: this.value }, true); });
   var ovDueItems = [];
   $('ovDueF').addEventListener('click', function (e) { var b = e.target.closest('[data-of]'); if (b) { ovFilter = b.dataset.of; renderProjects(); } });
   $('ovDue').addEventListener('click', function (e) { var b = e.target.closest('[data-due]'); if (b) go(ovDueItems[+b.dataset.due].go); });
@@ -427,7 +425,7 @@
     topbar('監造抽查紀錄', '現場模式', '');
     $('fdDate').textContent = (+td.slice(5, 7)) + '/' + (+td.slice(8)) + ' 星期' + '日一二三四五六'[new Date(td + 'T00:00:00').getDay()];
     $('fdProj').innerHTML = S.projects.map(function (x) { return '<option value="' + x.id + '"' + (p && x.id === p.id ? ' selected' : '') + '>' + esc(x.info.name || '未命名工程') + '</option>'; }).join('');
-    if (!p) { $('fdPlan').innerHTML = '<div class="empty">還沒有工程。請先到「總覽」新增工程。</div>'; $('fdTwo').innerHTML = ''; $('fdDone').innerHTML = ''; show('vField'); return; }
+    if (!p) { $('fdPlan').innerHTML = '<div class="empty">還沒有工程。請先到「明細」新增工程。</div>'; $('fdTwo').innerHTML = ''; $('fdDone').innerHTML = ''; show('vField'); return; }
     var a = lastAct(p), day = projDay(p, td);
     $('fdProjSub').textContent = [day ? '第 ' + day + ' 天' : '', a != null ? '實際 ' + a.toFixed(1) + '%' : ''].filter(Boolean).join('・');
     var pls = plansOn(p, td);
@@ -464,10 +462,8 @@
   });
 
   $('recDir').addEventListener('click', function () { go({ v: 'works', pid: cur.pid }); });
-  $('projectList').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-pid]'); if (b) go({ v: 'project', pid: b.dataset.pid });
-  });
   function lastPhrases() { var p = S.projects.filter(function (x) { return x.phrases && x.phrases.length; }).pop(); return p ? JSON.parse(JSON.stringify(p.phrases)) : null; }
+  $('pjNew').addEventListener('click', function () { $('btnNewProject').click(); });
   $('btnNewProject').addEventListener('click', function () {
     var p = { id: uid(), info: { durType: '日曆天', changeCount: '0', extendDays: '0' }, recs: {}, mats: [], created: Date.now() };
     var ph = lastPhrases(); if (ph) p.phrases = ph;
@@ -553,7 +549,8 @@
   }
   function renderProject() {
     var p = proj(cur.pid), I = p.info;
-    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '總覽');
+    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '));
+    $('pjSel').innerHTML = projOpts(p);
     /* 施工抽查進度（工項目錄在「施工抽查」頁） */
     var on = enabledWorks(p), tot = 0, ngR = 0, ph = [0, 0, 0], wk = 0, ws0 = wkStart(today()), we0 = addDays(ws0, 6), used = 0;
     on.forEach(function (w) {

@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=53">
+<link rel="stylesheet" href="style.css?v=54">
 </head>
 <body>
 
@@ -28,7 +28,7 @@
   <div class="rail-logo" role="img" aria-label="公司圖標"><svg viewBox="0 0 100 100"><defs><clipPath id="lgc"><circle cx="50" cy="50" r="50"/></clipPath></defs><circle cx="50" cy="50" r="50" fill="#141414"/><path d="M-2 46.5 L102 50.5" stroke="#fff" stroke-width="3" clip-path="url(#lgc)"/></svg></div>
   <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>工程</button>
   <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
-  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
+  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>明細</button>
   <button type="button" data-nav="docs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></svg>公文</button>
   <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M7 6H5v15h14V6h-2"/><path d="M9 13l2 2 4-4"/></svg>抽查</button>
   <button type="button" data-nav="materials"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>材料</button>
@@ -39,27 +39,25 @@
   <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
   <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日曆</button>
   <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M7 6H5v15h14V6h-2"/><path d="M9 13l2 2 4-4"/></svg>抽查</button>
-  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
+  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>明細</button>
 </nav>
 
-<!-- ===== 1 總覽（辦公室） ===== -->
+<!-- ===== 1 明細（單一工程） ===== -->
 <main id="vProjects" class="view wrap wide" hidden>
   <div class="ov-head">
-    <div class="ov-title"><h2 class="h">總覽</h2><p class="muted" id="ovDate"></p></div>
+    <div class="ov-title"><h2 class="h">明細</h2><p class="muted" id="ovDate"></p></div>
     <div class="ui-mode" role="group" aria-label="模式"><button type="button" class="on" data-mode="office">辦公室</button><button type="button" data-mode="field">現場</button></div>
   </div>
-  <section class="ov-kpi" id="ovKpi" aria-label="摘要"></section>
-  <div class="ov-grid">
-    <section class="card ov-card" aria-labelledby="h-ovp">
-      <div class="ov-card-h"><h2 class="h small" id="h-ovp">工程</h2><button type="button" class="btn ghost sm" id="btnNewProject">＋ 新增工程</button></div>
-      <div id="projectList" class="ov-table"></div>
-    </section>
-    <section class="card ov-card" aria-labelledby="h-ovd">
-      <div class="ov-card-h"><h2 class="h small" id="h-ovd">近 7 天</h2><div class="cal-filter" id="ovDueF" role="group" aria-label="篩選"></div></div>
-      <ul class="ov-due" id="ovDue"></ul>
-    </section>
+  <div class="pj-bar">
+    <label class="pj-sel"><span class="sr-only">選擇工程</span><select id="ovProj" aria-label="選擇工程"></select></label>
+    <button type="button" class="btn ghost sm" id="btnNewProject">＋ 新增工程</button>
   </div>
-  <section class="ov-quick" id="ovQuick" aria-label="快速動作"></section>
+  <section class="ov-quick" id="ovQuick" aria-label="功能"></section>
+  <section class="ov-kpi" id="ovKpi" aria-label="工程摘要"></section>
+  <section class="card ov-card" aria-labelledby="h-ovd">
+    <div class="ov-card-h"><h2 class="h small" id="h-ovd">近 7 天</h2><div class="cal-filter" id="ovDueF" role="group" aria-label="篩選"></div></div>
+    <ul class="ov-due" id="ovDue"></ul>
+  </section>
   <section class="card quiet" id="ovSettings" aria-labelledby="h-backup">
     <div class="ov-card-h"><h2 class="h small" id="h-backup">設定與資料</h2>
       <nav class="mode-switch" aria-label="切換版本"><a id="msPersonal" title="個人版：資料只存在這台裝置">個人版</a><a id="msCo" title="共編版：資料存在雲端，可與同事共用">共編版</a></nav></div>
@@ -100,6 +98,10 @@
 
 <!-- ===== 2 工程：兩個目錄 + 基本資料 ===== -->
 <main id="vProject" class="view wrap wide" hidden>
+  <div class="pj-bar">
+    <label class="pj-sel"><span class="sr-only">選擇工程</span><select id="pjSel" aria-label="選擇工程"></select></label>
+    <button type="button" class="btn ghost sm" id="pjNew">＋ 新增工程</button>
+  </div>
   <section class="card cal" id="calCard" aria-labelledby="calTitle">
     <div class="cal-acts">
       <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v3H8z"/><path d="M6 6H4v15h16V6h-2"/><path d="M8 12h8M8 16h5"/></svg>總表／缺失</button>
@@ -603,9 +605,9 @@
   </div>
 </div>
 
-<script src="data.js?v=53"></script>
-<script src="mat-parse.js?v=53"></script>
-<script src="cloud.js?v=53"></script>
-<script src="app.js?v=53"></script>
+<script src="data.js?v=54"></script>
+<script src="mat-parse.js?v=54"></script>
+<script src="cloud.js?v=54"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>
