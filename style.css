@@ -644,3 +644,32 @@ button,input,select,textarea{font:inherit;color:inherit}
 .doc-t small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dl-txt b{max-width:100%}
 @media (min-width:960px){.cal{grid-template-rows:auto auto 1fr}.cal-acts{grid-row:1}.cal-head{grid-row:2}.cal-grid{grid-row:3}.cal-day{grid-row:2/span 2}}
+
+/* v49 監造日報 */
+.cb-daily{background:#2e7d32;color:#fff}
+.dr-list{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.dr-row{display:grid;grid-template-columns:56px 64px 70px 1fr auto auto 14px;align-items:center;gap:8px;text-align:left;width:100%;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);cursor:pointer;font:inherit;font-size:14px}
+.dr-row.today{border-color:var(--strong)}
+.dr-row:hover{border-color:var(--strong)}
+.dr-d{font-weight:800;display:flex;gap:4px;align-items:baseline}.dr-d small{color:var(--muted);font-weight:600}
+.dr-no,.dr-w,.dr-pc{color:var(--ink2);white-space:nowrap}
+.dr-i{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dr-st{font-weight:700;color:var(--muted);white-space:nowrap}.dr-st.ok{color:#2e7d32}
+@media (max-width:600px){.dr-row{grid-template-columns:48px 1fr auto 12px}.dr-no,.dr-w,.dr-pc{display:none}}
+.dr-items{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.dr-item{display:grid;grid-template-columns:1fr 90px 60px 120px auto;gap:6px;align-items:center}
+.dr-item input{padding:8px;border:1.5px solid var(--line);border-radius:6px;font:inherit;background:var(--bg);color:var(--ink);min-width:0}
+@media (max-width:600px){.dr-item{grid-template-columns:1fr 1fr 1fr}.dr-item input[data-if=name]{grid-column:1/-1}}
+.dr-auto{border:1.5px dashed var(--line);border-radius:8px;padding:8px 10px;margin:8px 0}
+.dr-auto-h{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:700;color:var(--muted)}
+.dr-auto ul{margin:6px 0 0;padding-left:18px}.dr-auto ul.off{opacity:.45;text-decoration:line-through}
+/* 監造報表列印 */
+.paper.dr-paper{padding:0;width:210mm;overflow:hidden}
+.dr-page{width:210mm;height:296mm;box-sizing:border-box;padding:10mm 13mm;position:relative}
+.dr-sheet{font-family:"GW Times","GW Kai","Times New Roman","DFKai-SB","BiauKai TC","標楷體-繁","BiauKai","標楷體",serif;color:#000}
+.dr-t{border-collapse:collapse;table-layout:fixed;width:auto}
+.paper .dr-t td{border:0;padding:0 .6mm;line-height:1.2;white-space:nowrap;overflow:hidden;font-weight:400}
+.dr-t td.dr-w{white-space:pre-wrap;word-break:break-all}
+.dr-t td .dr-fit{overflow:hidden;white-space:pre-wrap;word-break:break-all;line-height:1.35}
+.paper.dr-paper .dr-page.rec-sec{margin-top:6mm;border-top:1px dashed var(--line)}
+@media print{.paper.dr-paper{width:210mm}.paper.dr-paper .dr-page.rec-sec{margin-top:0;border-top:0;break-before:page}}

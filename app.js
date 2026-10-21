@@ -34,6 +34,7 @@
     { k: 'changedDuration', l: '變更後工期（天）', t: 'number' },
     { k: 'changedAmount', l: '變更後金額', im: 'numeric' },
     { k: 'changedEnd', l: '變更後完工日期', t: 'date' },
+    { k: 'actualEnd', l: '實際完工日期', t: 'date' },
     { k: 'inspector', l: '監造人員' },
     { k: 'siteManager', l: '工地主任' },
     { k: 'note', l: '備註', t: 'textarea', wide: true }
@@ -222,7 +223,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -269,13 +270,13 @@
     else if (/^(docEdit|docPrint)$/.test(cur.v) && !docById(p, cur.did)) cur = { v: 'docs', pid: cur.pid };
     $('sumBar').hidden = true;
     /* 公文列印需要零邊界（Safari 不支援具名頁面，所以只在公文預覽時加上全域 @page） */
-    if ($('gwFontBar') && cur.v !== 'docPrint') $('gwFontBar').hidden = true;
+    if ($('gwFontBar') && !/^(docPrint|dailyPrint)$/.test(cur.v)) $('gwFontBar').hidden = true;
     if (cur.v !== 'docPrint') $('gwBar').hidden = true;
-    var pgs = $('gwPage'); if (cur.v === 'docPrint' && !pgs) { pgs = document.createElement('style'); pgs.id = 'gwPage'; pgs.textContent = '@page{size:A4 portrait;margin:0}'; document.head.appendChild(pgs); } else if (cur.v !== 'docPrint' && pgs) pgs.remove();
+    var pgs = $('gwPage'); if (/^(docPrint|dailyPrint)$/.test(cur.v) && !pgs) { pgs = document.createElement('style'); pgs.id = 'gwPage'; pgs.textContent = '@page{size:A4 portrait;margin:0}'; document.head.appendChild(pgs); } else if (!/^(docPrint|dailyPrint)$/.test(cur.v) && pgs) pgs.remove();
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
-      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint
+      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint
     })[cur.v]();
     coEdit();
     if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
@@ -1084,7 +1085,7 @@
   });
   function makePdf() {
     /* 公文：確定標楷體與 Times 已載入才轉成圖片 */
-    if ($('paper').classList.contains('gw-paper') && document.fonts && document.fonts.load) {
+    if (($('paper').classList.contains('gw-paper') || $('paper').classList.contains('dr-paper')) && document.fonts && document.fonts.load) {
       return Promise.all([document.fonts.load('16pt "GW Kai"', '測'), document.fonts.load('16pt "GW Times"', 'A1')]).catch(function () {}).then(makePdf2);
     }
     return makePdf2();
@@ -1102,7 +1103,7 @@
       if (brk) curPg = null;
     });
     pages = pages.filter(function (pg) { return pg.textContent.trim() || pg.querySelector('img'); });
-    var gw = src.classList.contains('gw-paper');
+    var gw = src.classList.contains('gw-paper') || src.classList.contains('dr-paper');
     pages.forEach(function (pg) { pg.style.width = Wmm + 'mm'; pg.style.padding = gw ? '0' : my + 'mm ' + mx + 'mm'; host.appendChild(pg); });
     var pdf = new window.jspdf.jsPDF({ orientation: land ? 'landscape' : 'portrait', unit: 'mm', format: 'a4', compress: true });
     var first = true;
@@ -1857,6 +1858,214 @@
     e.target.files[0].arrayBuffer().then(gwSaveBuf);
   });
 
+  /* ========== 監造日報：版面依同事系統輸出的「公共工程監造報表」Excel 逐格重現（欄寬、列高、合併、框線、字型）；日曆天每日一張 ========== */
+  var DR_TPL = {"w":[17.33203125,5.33203125,10.1640625,10.6640625,7.1640625,4.0,9.33203125,4.1640625,18.6640625,18.83203125],"rows":[{"h":24.0,"cells":[{"c":0,"cs":10,"t":"公共工程監造報表","f":12.0,"b":1,"m":1,"h":"center","v":"center","bd":[2,2,2,0]}]},{"h":18.75,"cells":[{"c":0,"t":"報表編號：","f":12.0,"h":"center","v":"center","bd":[2,0,0,0]},{"c":1,"f":12.0,"h":"left","v":"center","k":"no"},{"c":2},{"c":3},{"c":4},{"c":5},{"c":6},{"c":7},{"c":8},{"c":9,"bd":[0,2,0,0]}]},{"h":24.0,"cells":[{"c":0,"t":"本日天氣：","f":12.0,"h":"center","v":"center","bd":[2,0,0,0]},{"c":1,"t":"上午:","f":12.0,"h":"left","v":"center"},{"c":2,"f":12.0,"v":"center","k":"wAm"},{"c":3,"t":"下午：","f":12.0,"v":"center"},{"c":4,"f":12.0,"v":"center","k":"wPm"},{"c":5},{"c":6,"cs":2,"t":"填報日期：","f":12.0,"h":"right","v":"center","bd":[0,0,0,1]},{"c":8,"f":12.0,"h":"left","v":"center","bd":[0,0,0,1],"k":"date"},{"c":9,"f":12.0,"h":"left","v":"center","bd":[0,2,0,1],"k":"wd"}]},{"h":24.75,"cells":[{"c":0,"cs":2,"t":"工程名稱","f":12.0,"h":"center","v":"center","bd":[2,0.5,1,0.5]},{"c":2,"cs":8,"f":12.0,"h":"left","v":"center","w":1,"bd":[0.5,0.5,1,0.5],"k":"name"}]},{"h":23.25,"cells":[{"c":0,"cs":2,"t":"契約工期","f":12.0,"h":"center","v":"center","w":1,"bd":[2,0.5,0.5,0.5]},{"c":2,"cs":2,"t":"開工日期","f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":4,"cs":2,"t":"累計工期","f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":6,"cs":2,"t":"剩餘工期","f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":8,"t":"預定完工日期","f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":9,"t":"實際完工日期","f":12.0,"h":"center","v":"center","bd":[0.5,2,0.5,0.5]}]},{"h":23.25,"cells":[{"c":0,"f":12.0,"h":"right","v":"center","w":1,"bd":[2,0,0.5,0.5],"k":"dur"},{"c":1,"t":"天","f":12.0,"h":"left","v":"center","w":1,"bd":[0,0.5,0.5,0.5]},{"c":2,"cs":2,"f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5],"k":"start"},{"c":4,"f":12.0,"h":"right","v":"center","bd":[0.5,0,0.5,0.5],"k":"elapsed"},{"c":5,"t":"天","f":12.0,"v":"center","bd":[0,0.5,0.5,0.5]},{"c":6,"f":12.0,"h":"right","v":"center","bd":[0.5,0,0.5,0.5],"k":"remain"},{"c":7,"t":"天","f":12.0,"v":"center","bd":[0,0.5,0.5,0.5]},{"c":8,"f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5],"k":"planEnd"},{"c":9,"f":12.0,"h":"center","v":"center","bd":[0.5,2,0.5,0.5],"k":"actEnd"}]},{"h":28.0,"cells":[{"c":0,"t":"契約變更次數：","f":12.0,"h":"right","v":"center","bd":[2,0.5,0.5,0.5]},{"c":1,"f":12.0,"h":"center","v":"center","bd":[0.5,0,0.5,0.5],"k":"changes"},{"c":2,"t":"次","f":12.0,"h":"left","v":"center","bd":[0,0.5,0.5,0.5]},{"c":3,"cs":3,"t":"工期展延天數：","f":12.0,"h":"right","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":6,"f":12.0,"h":"center","v":"center","bd":[0.5,0,0.5,0.5],"k":"ext"},{"c":7,"t":"天","f":12.0,"h":"left","v":"center","bd":[0,0.5,0.5,0.5]},{"c":8,"rs":3,"t":"契約金額","f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":9,"f":12.0,"h":"left","v":"center","bd":[0.5,2,0.5,0.5],"k":"amount"}]},{"h":14.0,"cells":[{"c":0,"rs":2,"t":"預定進度（％）","f":12.0,"h":"right","v":"center","bd":[2,0.5,0.5,0.5]},{"c":1,"cs":2,"rs":2,"f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5],"k":"plan"},{"c":3,"cs":3,"rs":2,"t":"實際進度（％）","f":12.0,"h":"right","v":"center","bd":[0.5,0.5,0.5,0.5]},{"c":6,"cs":2,"rs":2,"f":12.0,"h":"center","v":"center","bd":[0.5,0.5,0.5,0.5],"k":"act"},{"c":9,"rs":2,"bd":[0.5,2,0.5,0.5]}]},{"h":14.0,"cells":[]},{"h":18.0,"cells":[{"c":0,"cs":10,"t":"一、工程進行情況(含約定之重要施工項目及數量)：(詳施工日誌)","f":11.0,"h":"left","v":"center","bd":[2,0.5,1,0]}]},{"h":15,"cells":[{"c":0,"cs":10,"f":11.0,"h":"left","v":"top","bd":[2,2,0,0],"rs":6,"k":"s1"}]},{"h":15,"cells":[]},{"h":15,"cells":[]},{"h":15,"cells":[]},{"h":15,"cells":[]},{"h":15,"cells":[]},{"h":18.0,"cells":[{"c":0,"cs":10,"t":"二、監督依照設計圖說及核定施工圖說施工（含約定之檢驗停留點及施工抽查等情形）：","f":11.0,"h":"left","v":"center","bd":[2,0.5,1,0]}]},{"h":15,"cells":[{"c":0,"cs":10,"f":11.0,"v":"top","bd":[2,2,0,1],"rs":4,"k":"s2"}]},{"h":16.5,"cells":[]},{"h":15,"cells":[]},{"h":15,"cells":[]},{"h":18.0,"cells":[{"c":0,"cs":10,"t":"三、查核材料規格及品質(含約定之檢驗停留點、材料設備管制及檢(試)驗等抽驗情形)：","f":11.0,"h":"left","v":"center","bd":[2,0.5,1,0]}]},{"h":16.5,"cells":[{"c":0,"cs":10,"f":11.0,"v":"top","bd":[2,2,0,1],"rs":4,"k":"s3"}]},{"h":16.5,"cells":[]},{"h":16.5,"cells":[]},{"h":16.5,"cells":[]},{"h":16.5,"cells":[{"c":0,"cs":10,"t":"四、督導工地職業安全衛生事項：","f":11.0,"v":"center","bd":[2,0.5,1,0]}]},{"h":16.5,"cells":[{"c":0,"cs":5,"t":"（一）施工廠商施工前檢查事項辦理情形：","f":11.0,"h":"left","v":"top","w":1,"bd":[2,0,0,0]},{"c":5,"cs":4,"f":11.0,"h":"left","v":"top","w":1,"k":"x4a"},{"c":9,"bd":[0,2,0,0]}]},{"h":16.5,"cells":[{"c":0,"cs":10,"bd":[2,2,0,0],"k":"x4a2"}]},{"h":16.5,"cells":[{"c":0,"cs":4,"t":"（二）其他工地安全衛生督導事項：","f":11.0,"h":"left","v":"top","w":1,"bd":[2,0,0,0]},{"c":4,"cs":6,"f":11.0,"h":"left","v":"top","w":1,"bd":[0,2,0,0],"k":"x4b"}]},{"h":16.5,"cells":[{"c":0,"cs":10,"bd":[2,2,0,1],"k":"x4b2"}]},{"h":18.0,"cells":[{"c":0,"cs":10,"t":"五、其他約定監造事項(含重要事項紀錄、主管機關指示及通知廠商辦理事項等)：","f":11.0,"h":"left","v":"center","bd":[2,2,1,0]}]},{"h":88.0,"cells":[{"c":0,"cs":10,"f":11.0,"h":"left","v":"top","w":1,"bd":[2,2,0,1],"k":"s5"}]},{"h":130.0,"cells":[{"c":0,"cs":10,"t":"監造單位簽章：","f":11.0,"h":"left","v":"top","bd":[2,2,1,1]}]},{"h":125.0,"cells":[{"c":0,"cs":10,"t":"註：\n1.監造報告表原則應包含上述欄位；惟若上述欄位之內容業詳載於廠商填報之施工日誌，並按時陳報監造單位核備者，則監造報表之該等欄位可載明參詳施工日誌。\n2.本表原則應按日填寫，機關另有規定者，從其規定；若屬委外監造之工程，則一律按日填寫。未達新臺幣五千萬元或工期為九十日曆天以下之工程，得由機關統一訂定內部稽查程序及監造報告表之填報方式與周期。\n3.本監造報告表格式僅供參考，各機關亦得依契約約定事項，自行增訂之。\n4.契約工期如有修正，應填修正後之契約工期，含展延工期及不計工期天數；如有依契約變更設計，預定進度及實際進度應填變更設計後計算之進度。\n5.公共工程屬建築物者，仍應依本表辦理。惟該工程之監造人（建築師），應另依內政部最新訂頒之「建築物（監督、查核）報告表」填報。","f":10.0,"h":"left","v":"top","w":1,"bd":[2,2,1,2]}]},{"h":18.0,"cells":[{"c":0,"bd":[0,0,2,0]},{"c":1,"bd":[0,0,2,0]},{"c":2,"bd":[0,0,2,0]},{"c":3,"bd":[0,0,2,0]},{"c":4,"bd":[0,0,2,0]},{"c":5,"bd":[0,0,2,0]},{"c":6,"bd":[0,0,2,0]},{"c":7,"bd":[0,0,2,0]},{"c":8,"bd":[0,0,2,0]},{"c":9,"bd":[0,0,2,0]}]},{"h":15,"cells":[{"c":0},{"c":1},{"c":2},{"c":3},{"c":4},{"c":5},{"c":6},{"c":7},{"c":8},{"c":9}]}]};
+  var DR_WEATHER = ['晴', '陰', '多雲', '雨', '陣雨', '颱風', '停工'];
+  function dailies(p) { return p.dailies || (p.dailies = []); }
+  function dailyOf(p, date) { return dailies(p).filter(function (x) { return x.date === date; })[0]; }
+  function dailyMake(p, date) {
+    var d = dailyOf(p, date); if (d) return d;
+    var prev = dailies(p).filter(function (x) { return x.date < date; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; })[0];
+    d = { id: uid(), date: date, wAm: '', wPm: '', plan: prev ? prev.plan : '', act: prev ? prev.act : '', items: [], x2: '', x3: '', x4a: 'done', x4b: '', x5: '', off: {} };
+    dailies(p).push(d); return d;
+  }
+  function drDays(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+  function drInfo(p) {
+    var I = p.info || {}, dur = +(I.changedDuration || I.duration) || 0;
+    return { start: I.startDate || '', dur: dur, planEnd: I.changedEnd || I.planEnd || (I.startDate && dur ? addDays(I.startDate, dur - 1) : ''), amount: I.changedAmount || I.amount || '', changes: I.changeCount || 0, ext: I.extendDays || 0 };
+  }
+  function rocSlash(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '/' + (+a[1]) + '/' + (+a[2]) : ''; }
+  function rocYmd(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '年' + (+a[1]) + '月' + (+a[2]) + '日' : ''; }
+  function pct(v) { return v === '' || v == null || isNaN(+v) ? '' : (+v).toFixed(2) + '%'; }
+  /* 當天自動帶入：二 施工抽查、三 材料、四 勞安、五 公文 */
+  function drAuto(p, date) {
+    var o = { s2: [], s3: [], s4: [], s5: [] }, matDone = {};
+    var res = function (w, r) { var st = recState(w, r); return st === 'ok' ? '合格' : st === 'fixed' ? '缺失已改善' : st === 'ng' ? '有缺失' : '檢查中'; };
+    var ngNames = function (w, r) {
+      var xs = [];
+      if (w.kind === 'irregular') (r.rows || []).forEach(function (x) { if (x.r === 'ng') xs.push(x.name); });
+      else effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (it.c.r === 'ng') xs.push(it.name); }); });
+      return xs.length ? '（' + xs.join('、') + '）' : '';
+    };
+    Object.keys(p.recs || {}).forEach(function (wid) {
+      var w = WORK[wid]; if (!w || w.kind === 'photo') return;
+      (p.recs[wid] || []).forEach(function (r) {
+        if (r.draft) return;
+        var loc = r.location ? '（' + r.location + '）' : '';
+        if (r.checkDate === date) {
+          if (w.kind === 'matform') { var m = matById(p, r.mid); matDone[r.mid] = 1; o.s3.push((m ? m.name : '材料') + '進場抽查' + loc + '：' + (res(w, r) === '有缺失' ? '不合格' + ngNames(w, r) : res(w, r))); }
+          else if (w.kind === 'safety') o.s4.push('勞安衛生抽查' + loc + '：' + res(w, r) + (res(w, r) === '有缺失' ? ngNames(w, r) : ''));
+          else o.s2.push((w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name) + loc + '：' + res(w, r) + (res(w, r) === '有缺失' ? ngNames(w, r) : ''));
+        }
+        var fd = isFix(w) ? r.fixDate : (r.reTime || '').slice(0, 10);
+        if (fd === date && r.checkDate !== date && recState(w, r) === 'fixed') o[w.kind === 'safety' ? 's4' : w.kind === 'matform' ? 's3' : 's2'].push((w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name) + loc + '缺失複查：已完成改善');
+      });
+    });
+    (p.mats || []).forEach(function (m) {
+      if (m.arrivalDate === date) o.s3.push((m.name || '材料') + '進場');
+      if (!matDone[m.id] && m.inspDate === date && m.inspResult) o.s3.push((m.name || '材料') + '進場抽查：' + (m.inspResult === 'ok' ? '合格' : '不合格'));
+    });
+    (p.docs || []).forEach(function (d) {
+      if (d.date === date) o.s5.push(d.no + ' ' + shortSubj(d));
+      if (d.kind === 'meet' && d.meet && (d.meet.time || '').slice(0, 10) === date) o.s5.push(d.meet.time.slice(11, 16) + ' ' + shortSubj(d));
+    });
+    return o;
+  }
+  function drCum(p, d, it) {
+    if (it.cum !== '' && it.cum != null) return it.cum;
+    var s = 0; dailies(p).forEach(function (x) { if (x.date <= d.date) (x.items || []).forEach(function (y) { if (y.name === it.name && y.unit === it.unit) s += +y.qty || 0; }); });
+    return Math.round(s * 1000) / 1000;
+  }
+  function drValues(p, date) {
+    var I = drInfo(p), d = dailyOf(p, date) || { items: [], off: {}, x4a: 'done' }, a = drAuto(p, date), off = d.off || {};
+    var el = I.start ? drDays(I.start, date) + 1 : '';
+    var lines = function (auto, key, extra) { var xs = (off[key] ? [] : auto).concat(lines0(extra)); return xs.length ? xs : ['無']; };
+    var s1 = (d.items || []).filter(function (it) { return it.name; }).map(function (it) {
+      return it.name + '    本日完成數量：' + (it.qty === '' || it.qty == null ? '' : it.qty) + (it.unit || '') + '    累計完成數量：' + drCum(p, d, it) + (it.unit || '');
+    });
+    var s4 = lines(a.s4, 's4', d.x4b);
+    return {
+      no: el ? el + ' ' : '', wAm: d.wAm || '', wPm: d.wPm || '', date: rocYmd(date), wd: '星期' + '日一二三四五六'[new Date(date + 'T00:00:00').getDay()],
+      name: p.info.name || '', dur: I.dur || '', start: rocSlash(I.start), elapsed: el ? el + ' ' : '', remain: el && I.dur ? (I.dur - el) + ' ' : '', planEnd: rocSlash(I.planEnd), actEnd: rocSlash(p.info.actualEnd || ''),
+      changes: I.changes, ext: I.ext, amount: I.amount ? '原契約:' + Number(String(I.amount).replace(/,/g, '')).toLocaleString('en-US') : '', plan: pct(d.plan), act: pct(d.act),
+      x4a: d.x4a === 'undone' ? '□完成 ■未完成' : '■完成 □未完成', x4a2: '', x4b: s4.join('；'), x4b2: '',
+      s1: s1.length ? s1 : ['無'], s2: lines(a.s2, 's2', d.x2), s3: lines(a.s3, 's3', d.x3), s5: lines(a.s5, 's5', d.x5)
+    };
+  }
+  function lines0(t) { return String(t || '').split('\n').map(function (x) { return x.replace(/\s+$/, ''); }).filter(function (x) { return x.trim(); }); }
+  /* Excel 欄寬 → 像素（新細明體 12 的數字寬 8px），整張依「縮放成一頁」放進 A4 可列印範圍（左右 13mm、上下 10mm） */
+  var DR_GEO = (function () {
+    var px = DR_TPL.w.map(function (w) { return Math.floor(w * 8 + 5); }), wpt = px.reduce(function (s, x) { return s + x; }, 0) * 0.75;
+    var hpt = DR_TPL.rows.reduce(function (s, r) { return s + r.h; }, 0), PT = 25.4 / 72;
+    var k = Math.min(184 / (wpt * PT), 277 / (hpt * PT));
+    return { k: k, cols: px.map(function (x) { return x * 0.75 * PT * k; }), rows: DR_TPL.rows.map(function (r) { return r.h * PT * k; }) };
+  })();
+  function drSheet(p, date) {
+    var v = drValues(p, date), G = DR_GEO, BW = { 2: 0.45, 1: 0.25, 0.5: 0.12 };
+    var h = '<table class="dr-t"><colgroup>' + G.cols.map(function (w) { return '<col style="width:' + w.toFixed(2) + 'mm">'; }).join('') + '</colgroup>';
+    DR_TPL.rows.forEach(function (r, ri) {
+      h += '<tr style="height:' + G.rows[ri].toFixed(2) + 'mm">';
+      r.cells.forEach(function (c) {
+        var st = [], bd = c.bd || [0, 0, 0, 0], sides = ['left', 'right', 'top', 'bottom'];
+        bd.forEach(function (b, i) { if (b) st.push('border-' + sides[i] + ':' + BW[b] + 'mm solid #000'); });
+        st.push('font-size:' + ((c.f || 12) * G.k).toFixed(2) + 'pt');
+        if (c.b) st.push('font-weight:700');
+        if (c.m) st.push("font-family:PMingLiU,MingLiU,'Songti TC','Noto Serif CJK TC',serif");
+        st.push('text-align:' + (c.h === 'center' ? 'center' : c.h === 'right' ? 'right' : 'left'));
+        st.push('vertical-align:' + (c.v === 'top' ? 'top' : c.v === 'bottom' ? 'bottom' : 'middle'));
+        var txt = '', cls = '';
+        if (c.k) {
+          var val = v[c.k];
+          if (Array.isArray(val)) {
+            var hh = 0; for (var q = ri; q < ri + (c.rs || 1); q++) hh += G.rows[q];
+            txt = '<div class="dr-fit" style="height:' + (hh - 0.4).toFixed(2) + 'mm">' + val.map(esc).join('<br>') + '</div>';
+          } else txt = esc(val);
+        } else if (c.t) txt = esc(c.t).replace(/\n/g, '<br>');
+        if (c.w || (c.k && /^(s5|x4b|name)$/.test(c.k))) cls = ' class="dr-w"';
+        h += '<td' + (c.cs ? ' colspan="' + c.cs + '"' : '') + (c.rs ? ' rowspan="' + c.rs + '"' : '') + cls + ' style="' + st.join(';') + '">' + txt + '</td>';
+      });
+      h += '</tr>';
+    });
+    return h + '</table>';
+  }
+  /* 內容超過格子時縮小字級，格子不變 */
+  function drFit(root) {
+    root.querySelectorAll('.dr-fit').forEach(function (el) {
+      var f = parseFloat(getComputedStyle(el.parentNode).fontSize), n = 0;
+      while (el.scrollHeight > el.clientHeight + 1 && n++ < 30) { f *= 0.94; el.style.fontSize = f + 'px'; el.style.lineHeight = '1.15'; }
+    });
+  }
+  function drPages(p, dates) { return dates.map(function (dt, i) { return '<section class="dr-page' + (i ? ' rec-sec' : '') + '"><div class="dr-sheet">' + drSheet(p, dt) + '</div></section>'; }).join(''); }
+  /* ---- 月表 ---- */
+  $('btnDaily').addEventListener('click', function () { var t = today(); go({ v: 'daily', pid: cur.pid, ym: t.slice(0, 7) }); });
+  function monthDays(ym) { var a = ym.split('-'), n = new Date(+a[0], +a[1], 0).getDate(), out = []; for (var i = 1; i <= n; i++) out.push(ym + '-' + ('0' + i).slice(-2)); return out; }
+  function drRange(p, ym) {
+    var I = drInfo(p);
+    return monthDays(ym).filter(function (d) { return (!I.start || d >= I.start) && (!I.planEnd || d <= addDays(I.planEnd, +I.ext || 0) || dailyOf(p, d)); });
+  }
+  function renderDaily() {
+    var p = proj(cur.pid), ym = cur.ym || today().slice(0, 7), I = drInfo(p), a = ym.split('-');
+    topbar('監造日報', p.info.name || '未命名工程', '工程');
+    $('drMonth').textContent = (a[0] - 1911) + ' 年 ' + (+a[1]) + ' 月';
+    $('drWarn').hidden = !!(I.start && I.dur);
+    var days = drRange(p, ym), td = today();
+    $('drList').innerHTML = days.length ? days.map(function (dt) {
+      var d = dailyOf(p, dt), au = drAuto(p, dt), n = I.start ? drDays(I.start, dt) + 1 : '';
+      var cnt = au.s2.length + au.s3.length + au.s4.length + au.s5.length;
+      return '<button type="button" class="dr-row' + (dt === td ? ' today' : '') + '" data-dr="' + dt + '"><span class="dr-d">' + (+dt.slice(5, 7)) + '/' + (+dt.slice(8)) + '<small>' + '日一二三四五六'[new Date(dt + 'T00:00:00').getDay()] + '</small></span>' +
+        '<span class="dr-no">' + (n ? '第' + n + '號' : '') + '</span><span class="dr-w">' + esc([d && d.wAm, d && d.wPm].filter(Boolean).join('/') || '—') + '</span>' +
+        '<span class="dr-i">' + (d && d.items.length ? d.items.length + ' 項施工' : '無施工日誌') + (cnt ? '・帶入 ' + cnt + ' 筆' : '') + '</span>' +
+        '<span class="dr-pc">' + (d && (d.plan || d.act) ? pct(d.plan) + ' / ' + pct(d.act) : '') + '</span><span class="dr-st ' + (d ? 'ok' : '') + '">' + (d ? '✓ 已填' : '○ 未填') + '</span><span class="chev">›</span></button>';
+    }).join('') : '<div class="empty">' + (I.start ? '本月不在工期內。' : '請先在工程資料填寫開工日期與契約工期。') + '</div>';
+    show('vDaily');
+  }
+  $('drPrev').addEventListener('click', function () { var a = (cur.ym || today().slice(0, 7)).split('-'), d = new Date(+a[0], +a[1] - 2, 1); cur.ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); go(cur, true); });
+  $('drNext').addEventListener('click', function () { var a = (cur.ym || today().slice(0, 7)).split('-'), d = new Date(+a[0], +a[1], 1); cur.ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); go(cur, true); });
+  $('drList').addEventListener('click', function (e) { var b = e.target.closest('[data-dr]'); if (b) go({ v: 'dailyEdit', pid: cur.pid, date: b.dataset.dr }); });
+  $('drPrintMonth').addEventListener('click', function () { go({ v: 'dailyPrint', pid: cur.pid, ym: cur.ym || today().slice(0, 7) }); });
+  $('drInfoBtn').addEventListener('click', function () { go({ v: 'project', pid: cur.pid }); setTimeout(function () { var b = $('infoCard'); if (b) { b.open = true; b.scrollIntoView({ block: 'start' }); } }, 50); });
+  /* ---- 單日編輯 ---- */
+  function renderDailyEdit() {
+    var p = proj(cur.pid), dt = cur.date, d = dailyOf(p, dt) || { items: [], off: {}, x4a: 'done', wAm: '', wPm: '', plan: '', act: '', x2: '', x3: '', x4b: '', x5: '' };
+    var I = drInfo(p), n = I.start ? drDays(I.start, dt) + 1 : '', au = drAuto(p, dt), off = d.off || {};
+    topbar('監造日報' + (n ? '（第' + n + '號）' : ''), rocYmd(dt) + ' 星期' + '日一二三四五六'[new Date(dt + 'T00:00:00').getDay()], '日報月表');
+    var wsel = function (k) { return '<select data-dk="' + k + '"><option value=""></option>' + DR_WEATHER.map(function (w) { return '<option' + (d[k] === w ? ' selected' : '') + '>' + w + '</option>'; }).join('') + '</select>'; };
+    var auto = function (key, list, label) {
+      return '<div class="dr-auto"><div class="dr-auto-h"><span>自動帶入（' + label + '）</span>' + (list.length ? '<label><input type="checkbox" data-doff="' + key + '"' + (off[key] ? '' : ' checked') + '>列入報表</label>' : '') + '</div>' +
+        (list.length ? '<ul' + (off[key] ? ' class="off"' : '') + '>' + list.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '<p class="muted">這天沒有相關紀錄。</p>') + '</div>';
+    };
+    var items = (d.items || []).map(function (it, i) {
+      return '<div class="dr-item" data-di="' + i + '"><input data-if="name" placeholder="工程項目" value="' + esc(it.name) + '"><input data-if="qty" inputmode="decimal" placeholder="本日數量" value="' + esc(it.qty) + '"><input data-if="unit" placeholder="單位" value="' + esc(it.unit) + '">' +
+        '<input data-if="cum" inputmode="decimal" placeholder="累計（空白自動加總）" value="' + esc(it.cum) + '"><button type="button" class="link" data-idel="' + i + '">刪除</button></div>';
+    }).join('');
+    $('drEditBody').innerHTML =
+      '<section class="card"><div class="grid g3"><label class="f">天氣（上午）' + wsel('wAm') + '</label><label class="f">天氣（下午）' + wsel('wPm') + '</label><span></span>' +
+      '<label class="f">預定進度（%）<input data-dk="plan" inputmode="decimal" value="' + esc(d.plan) + '"></label><label class="f">實際進度（%）<input data-dk="act" inputmode="decimal" value="' + esc(d.act) + '"></label>' +
+      '<p class="muted" style="align-self:end">進度以施工日誌為準。</p></div></section>' +
+      '<section class="card"><h2 class="h small">一、工程進行情況（含約定之重要施工項目及數量）</h2><div class="dr-items">' + (items || '<p class="muted">尚無施工項目。下一階段可從施工日誌匯入；目前可手動新增。</p>') + '</div>' +
+      '<button type="button" class="btn ghost sm" id="drAddItem">＋ 新增施工項目</button></section>' +
+      '<section class="card"><h2 class="h small">二、監督依照設計圖說施工（含檢驗停留點及施工抽查）</h2>' + auto('s2', au.s2, '施工抽查') + '<label class="f">補充<textarea data-dk="x2" rows="2">' + esc(d.x2) + '</textarea></label></section>' +
+      '<section class="card"><h2 class="h small">三、查核材料規格及品質</h2>' + auto('s3', au.s3, '材料進場與抽查') + '<label class="f">補充<textarea data-dk="x3" rows="2">' + esc(d.x3) + '</textarea></label></section>' +
+      '<section class="card"><h2 class="h small">四、督導工地職業安全衛生事項</h2><div class="seg"><label class="pill"><input type="radio" name="drx4a" value="done"' + (d.x4a !== 'undone' ? ' checked' : '') + '><span>（一）施工前檢查：完成</span></label><label class="pill"><input type="radio" name="drx4a" value="undone"' + (d.x4a === 'undone' ? ' checked' : '') + '><span>未完成</span></label></div>' +
+      auto('s4', au.s4, '勞安衛生抽查') + '<label class="f">（二）其他督導事項補充<textarea data-dk="x4b" rows="2">' + esc(d.x4b) + '</textarea></label></section>' +
+      '<section class="card"><h2 class="h small">五、其他約定監造事項</h2>' + auto('s5', au.s5, '當日公文、會議') + '<label class="f">補充（重要事項、主管機關指示、通知廠商事項）<textarea data-dk="x5" rows="3">' + esc(d.x5) + '</textarea></label></section>' +
+      '<div class="doc-acts"><button type="button" class="btn ghost" id="drPrevDay">‹ 前一天</button><button type="button" class="btn primary" id="drPv">預覽／輸出 PDF</button><button type="button" class="btn ghost" id="drNextDay">後一天 ›</button></div>';
+    show('vDailyEdit');
+  }
+  function drCur() { var p = proj(cur.pid); return dailyMake(p, cur.date); }
+  $('drEditBody').addEventListener('input', function (e) {
+    var t = e.target, d;
+    if (t.dataset.dk && t.tagName !== 'SELECT') { d = drCur(); d[t.dataset.dk] = t.value.trim() === '' && /plan|act/.test(t.dataset.dk) ? '' : (/plan|act/.test(t.dataset.dk) ? t.value.trim() : t.value); save(); }
+    if (t.dataset.if) { d = drCur(); var it = d.items[+t.closest('[data-di]').dataset.di]; it[t.dataset.if] = t.value.trim(); save(); }
+  });
+  $('drEditBody').addEventListener('change', function (e) {
+    var t = e.target, d = drCur();
+    if (t.tagName === 'SELECT' && t.dataset.dk) { d[t.dataset.dk] = t.value; save(); }
+    if (t.name === 'drx4a') { d.x4a = t.value; save(); }
+    if (t.dataset.doff) { d.off = d.off || {}; if (t.checked) delete d.off[t.dataset.doff]; else d.off[t.dataset.doff] = 1; save(); renderDailyEdit(); }
+  });
+  $('drEditBody').addEventListener('click', function (e) {
+    var t = e.target;
+    if (t.id === 'drAddItem') { var d = drCur(); d.items.push({ name: '', qty: '', unit: '', cum: '' }); save(); renderDailyEdit(); var xs = $('drEditBody').querySelectorAll('[data-if="name"]'); if (xs.length) xs[xs.length - 1].focus(); }
+    if (t.dataset.idel != null) { var d2 = drCur(); d2.items.splice(+t.dataset.idel, 1); save(); renderDailyEdit(); }
+    if (t.id === 'drPv') { drCur(); save(); go({ v: 'dailyPrint', pid: cur.pid, date: cur.date }); }
+    if (t.id === 'drPrevDay' || t.id === 'drNextDay') { cur.date = addDays(cur.date, t.id === 'drPrevDay' ? -1 : 1); go(cur, true); }
+  });
+  /* ---- 輸出 ---- */
+  function renderDailyPrint() {
+    var p = proj(cur.pid), paper = $('paper'), dates = cur.date ? [cur.date] : drRange(p, cur.ym);
+    topbar('列印預覽', cur.date ? rocYmd(cur.date) + ' 監造日報' : (+cur.ym.slice(0, 4) - 1911) + ' 年 ' + (+cur.ym.slice(5)) + ' 月監造日報（' + dates.length + ' 張）', cur.date ? '返回修改' : '日報月表');
+    paper.className = 'paper dr-paper';
+    paper.innerHTML = dates.length ? drPages(p, dates) : '<p class="pv-empty">這個月沒有在工期內的日期。</p>';
+    $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
+    $('printHint').textContent = '版面依公共工程監造報表（A4 直式）。用瀏覽器列印時，紙張選 A4、邊界「無」或「預設」皆可。';
+    gwFontCheck().then(function (ok) { if (/^daily/.test(cur.v)) gwFontBar(ok); });
+    show('vPreview');
+    drFit(paper);
+    var a = (cur.date || cur.ym + '-01').split('-');
+    setDocName(cur.date ? '監造日報_' + (a[0] - 1911) + '.' + a[1] + a[2] + '_' + (p.info.name || '') : '監造日報_' + (a[0] - 1911) + '年' + (+a[1]) + '月_' + (p.info.name || ''));
+  }
+
   /* ========== 抽查總表：截至某日的材料進場抽驗、分項施工抽查、缺失改善追蹤（格式依月進度會議報告） ========== */
   var sumOut = {};
   $('btnSum').addEventListener('click', function () {
@@ -2209,6 +2418,7 @@
       if (d.date) ev.push({ date: d.date, kind: 'doc', label: (d.kind === 'meet' ? '開會通知：' : '發文：') + shortSubj(d), sub: d.no, did: d.id });
       if (d.kind === 'meet' && d.meet && d.meet.time) ev.push({ date: d.meet.time.slice(0, 10), kind: 'meet', label: '會議：' + shortSubj(d), sub: [d.meet.time.slice(11, 16), d.meet.place].filter(Boolean).join(' · '), did: d.id });
     });
+    (p.dailies || []).forEach(function (d) { ev.push({ date: d.date, kind: 'daily', label: '監造日報' + ((d.items || []).length ? '（' + d.items.length + ' 項施工）' : ''), sub: [d.wAm, d.wPm].filter(Boolean).join('/'), drd: d.date }); });
     (p.mats || []).forEach(function (m) { if (m.arrivalDate) ev.push({ date: m.arrivalDate, kind: 'mat', label: '進場：' + (m.name || '材料'), sub: m.no || '', mid: m.id }); });
     (p.plans || []).forEach(function (pl) {
       if ((pl.rid && linked[pl.rid]) || linked[pl.wid + '|' + (pl.phase || 0) + '|' + pl.date]) return;
@@ -2220,9 +2430,9 @@
   function renderCal(p) {
     if (calY == null) { var t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); }
     $('calTitle').textContent = (calY - 1911) + ' 年 ' + (calM + 1) + ' 月（' + calY + '）';
-    var CF = { all: null, rec: ['rec'], plan: ['plan'], mat: ['mat'], doc: ['doc', 'meet'] };
+    var CF = { all: null, rec: ['rec'], plan: ['plan'], mat: ['mat'], doc: ['doc', 'meet'], daily: ['daily'] };
     var ev = calEvents(p).filter(function (e) { return !CF[calFilter] || CF[calFilter].indexOf(e.kind) >= 0; }), byDay = {};
-    $('calFilter').innerHTML = [['all', '全部'], ['rec', '抽查'], ['plan', '預定'], ['mat', '材料'], ['doc', '公文']].map(function (f) { return '<button type="button" class="cf' + (calFilter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+    $('calFilter').innerHTML = [['all', '全部'], ['rec', '抽查'], ['plan', '預定'], ['mat', '材料'], ['doc', '公文'], ['daily', '日報']].map(function (f) { return '<button type="button" class="cf' + (calFilter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
     ev.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
     var first = new Date(calY, calM, 1), start = new Date(calY, calM, 1 - first.getDay()), td = today(), cells = '';
     ['日', '一', '二', '三', '四', '五', '六'].forEach(function (d) { cells += '<div class="cal-wd">' + d + '</div>'; });
@@ -2238,7 +2448,7 @@
   }
   /* 日曆格子只放各類數量徽章（抽／預／材／文／會），內容在點選當天後的清單 */
   var calFilter = 'all';
-  var BADGE = [['rec', '抽'], ['plan', '預'], ['mat', '材'], ['doc', '文'], ['meet', '會']];
+  var BADGE = [['daily', '報'], ['rec', '抽'], ['plan', '預'], ['mat', '材'], ['doc', '文'], ['meet', '會']];
   function calBadges(list) {
     return BADGE.map(function (b) {
       var xs = list.filter(function (e) { return e.kind === b[0]; }); if (!xs.length) return '';
@@ -2256,7 +2466,7 @@
   function renderCalDay(p, list) {
     var on = enabledWorks(p);
     var d = calSel.split('-');
-    var tag = { plan: '預定', rec: '已查', mat: '進場', doc: '發文', meet: '會議' };
+    var tag = { plan: '預定', rec: '已查', mat: '進場', doc: '發文', meet: '會議', daily: '日報' };
     var rows = list.map(function (e) {
       var title = e.label.replace(/^材料抽查：/, '材料：');
       var badge = e.ng ? '<span class="dl-ng">' + e.ng + '缺失</span>' : e.overdue ? '<span class="dl-ng">過期</span>' : '';
@@ -2269,7 +2479,7 @@
             '<label class="dl-date">改日期<input type="date" data-redate="' + pl.id + '" value="' + pl.date + '"></label>' +
             '<button type="button" class="link" data-delplan="' + pl.id + '">刪除</button></div>' : '') + '</li>';
       }
-      var go2 = e.rid ? ' data-openrec="' + e.wid + '|' + e.rid + '"' : e.did ? ' data-opendoc="' + e.did + '"' : ' data-openmat="' + e.mid + '"';
+      var go2 = e.rid ? ' data-openrec="' + e.wid + '|' + e.rid + '"' : e.did ? ' data-opendoc="' + e.did + '"' : e.drd ? ' data-opendr="' + e.drd + '"' : ' data-openmat="' + e.mid + '"';
       return '<li class="dl-item"><button type="button" class="dl-row"' + go2 + '>' + line + '<span class="dl-chev">›</span></button></li>';
     }).join('');
     var opts = on.map(function (w) { return '<option value="' + w.id + '">' + esc(w.name) + '</option>'; }).join('');
@@ -2322,6 +2532,7 @@
     if (ds.openrec) { var a = ds.openrec.split('|'); go({ v: 'form', pid: p.id, wid: a[0], rid: a[1] }); return; }
     if (ds.openmat) go({ v: 'matItem', pid: p.id, mid: ds.openmat });
     if (ds.opendoc) go({ v: 'docEdit', pid: p.id, did: ds.opendoc });
+    if (ds.opendr) go({ v: 'dailyEdit', pid: p.id, date: ds.opendr });
   });
   $('calDay').addEventListener('change', function (e) {
     var id = e.target.dataset.redate; if (!id || !e.target.value) return;

@@ -63,6 +63,7 @@
       });
       (p.mats || []).forEach(function (m) { out['material:' + m.id] = { json: JSON.stringify({ pid: p.id, mat: m }) }; });
       (p.docs || []).forEach(function (d) { out['doc:' + d.id] = { json: JSON.stringify({ pid: p.id, doc: d }) }; });
+      (p.dailies || []).forEach(function (d) { out['daily:' + d.id] = { json: JSON.stringify({ pid: p.id, daily: d }) }; });
     });
     var co = A().state().company; if (co) out['cfg:company'] = { json: JSON.stringify({ company: co }) };
     Object.keys(out).forEach(function (k) { out[k].h = hash(out[k].json); });
@@ -151,6 +152,9 @@
           if (A().fixRec) A().fixRec(d.wid, d.rec);   // 舊格式紀錄轉為固定代碼
           var list = pp.recs[d.wid] || (pp.recs[d.wid] = []), k = list.findIndex(function (r) { return r.id === id; });
           if (k >= 0) list[k] = d.rec; else list.push(d.rec);
+        } else if (type === 'daily') {
+          var dl = pp.dailies || (pp.dailies = []), z = dl.findIndex(function (m) { return m.id === id; });
+          if (z >= 0) dl[z] = d.daily; else dl.push(d.daily);
         } else if (type === 'doc') {
           var docs = pp.docs || (pp.docs = []), q = docs.findIndex(function (m) { return m.id === id; });
           if (q >= 0) docs[q] = d.doc; else docs.push(d.doc);
@@ -176,6 +180,7 @@
     else S.projects.forEach(function (p) {
       if (type === 'material') p.mats = (p.mats || []).filter(function (m) { return m.id !== id; });
       else if (type === 'doc') p.docs = (p.docs || []).filter(function (m) { return m.id !== id; });
+      else if (type === 'daily') p.dailies = (p.dailies || []).filter(function (m) { return m.id !== id; });
       else if (type === 'record') Object.keys(p.recs || {}).forEach(function (w) { p.recs[w] = p.recs[w].filter(function (r) { return r.id !== id; }); });
     });
   }

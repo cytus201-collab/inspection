@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=48">
+<link rel="stylesheet" href="style.css?v=49">
 </head>
 <body>
 
@@ -56,6 +56,7 @@
     <div class="cal-acts">
       <button type="button" class="btn ghost sm" id="btnSum" title="抽查總表、施工不合格管制總表、缺失改善追蹤紀錄表">📋 總表／缺失</button>
       <button type="button" class="btn ghost sm" id="btnDocs" title="發文（函、開會通知單）與收文">📨 公文</button>
+      <button type="button" class="btn ghost sm" id="btnDaily" title="公共工程監造報表（日曆天每日一張）">📝 日報</button>
     </div>
     <div class="cal-head">
       <button type="button" class="btn ghost sm" id="calPrev" aria-label="上個月">‹</button>
@@ -344,6 +345,19 @@
   <div id="docEditBody"></div>
 </main>
 
+<!-- ===== 監造日報 ===== -->
+<main id="vDaily" class="view wrap" hidden>
+  <section class="card">
+    <div class="cal-head"><button type="button" class="btn ghost sm" id="drPrev" aria-label="上個月">‹</button><h2 class="h small" id="drMonth"></h2><button type="button" class="btn ghost sm" id="drNext" aria-label="下個月">›</button>
+      <button type="button" class="btn primary sm" id="drPrintMonth" style="margin-left:auto">整月列印／PDF</button></div>
+    <p class="draft-note" id="drWarn" hidden>報表編號、累計與剩餘工期需要「開工日期」與「契約工期」。<button type="button" class="link" id="drInfoBtn">前往工程基本資料</button></p>
+    <div id="drList" class="dr-list"></div>
+  </section>
+</main>
+<main id="vDailyEdit" class="view wrap" hidden>
+  <div id="drEditBody"></div>
+</main>
+
 <!-- ===== 抽查標準管理 ===== -->
 <main id="vStd" class="view wrap" hidden>
   <section class="card">
@@ -510,9 +524,9 @@
   </div>
 </div>
 
-<script src="data.js?v=48"></script>
-<script src="mat-parse.js?v=48"></script>
-<script src="cloud.js?v=48"></script>
-<script src="app.js?v=48"></script>
+<script src="data.js?v=49"></script>
+<script src="mat-parse.js?v=49"></script>
+<script src="cloud.js?v=49"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
