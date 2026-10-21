@@ -270,6 +270,7 @@
     $('sumBar').hidden = true;
     /* 公文列印需要零邊界（Safari 不支援具名頁面，所以只在公文預覽時加上全域 @page） */
     if ($('gwFontBar') && cur.v !== 'docPrint') $('gwFontBar').hidden = true;
+    if (cur.v !== 'docPrint') $('gwBar').hidden = true;
     var pgs = $('gwPage'); if (cur.v === 'docPrint' && !pgs) { pgs = document.createElement('style'); pgs.id = 'gwPage'; pgs.textContent = '@page{size:A4 portrait;margin:0}'; document.head.appendChild(pgs); } else if (cur.v !== 'docPrint' && pgs) pgs.remove();
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
@@ -1067,14 +1068,17 @@
   $('btnPdf').addEventListener('click', function () {
     var btn = $('btnPdf'), label = btn.textContent;
     btn.disabled = true; btn.textContent = '產生 PDF 中…'; $('pdfMsg').textContent = '';
-    (window.html2canvas ? Promise.resolve() : loadScript(CDN.h2c)).then(function () {
-      return window.jspdf ? null : loadScript(CDN.jspdf);
-    }).then(makePdf).then(function (blob) {
+    var libs = (window.html2canvas ? Promise.resolve() : loadScript(CDN.h2c)).then(function () { return window.jspdf ? null : loadScript(CDN.jspdf); });
+    if (cur.v === 'docPrint') {
+      libs.then(docPdfAll).then(function (names) { $('pdfMsg').textContent = '已產生 ' + names.length + ' 個檔案：' + names.join('、') + '。' + $('pdfMsg').textContent; })
+        .catch(function (err) { $('pdfMsg').textContent = (err && err.message) || 'PDF 產生失敗'; }).then(function () { btn.disabled = false; btn.textContent = label; });
+      return;
+    }
+    libs.then(makePdf).then(function (blob) {
       var a = document.createElement('a'), name = (docName || '抽查表') + '.pdf';
       a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
       $('pdfMsg').textContent = '已產生「' + name + '」。';
-      if (cur.v === 'docPrint') archiveDoc(blob);
     }).catch(function (err) { $('pdfMsg').textContent = (err && err.message) || 'PDF 產生失敗，請改用「列印」再選「另存為 PDF」。'; })
       .then(function () { btn.disabled = false; btn.textContent = label; });
   });
@@ -1533,7 +1537,7 @@
   $('btnNewLetter').addEventListener('click', function () { newDoc('letter'); });
   $('btnNewMeet').addEventListener('click', function () { newDoc('meet'); });
   $('docList').addEventListener('click', function (e) { var b = e.target.closest('[data-doc]'); if (b) go({ v: 'docEdit', pid: cur.pid, did: b.dataset.doc }); });
-  var DOC_F = [['no', '發文字號'], ['date', '發文日期', 'date'], ['speed', '速別', ['普通件', '速件', '最速件']], ['secret', '密等及解密條件或保密期限', ['普通', '密', '機密']], ['att', '附件']];
+  var DOC_F = [['no', '發文字號'], ['date', '發文日期', 'date'], ['speed', '速別', ['普通件', '速件', '最速件']], ['secret', '密等及解密條件或保密期限', ['普通', '密', '機密']], ['att', '附件'], ['short', '簡易主旨（檔名用，空白則自動擷取）']];
   var MEET_F = [['reason', '開會事由', 'area'], ['time', '開會時間', 'datetime-local'], ['place', '開會地點'], ['host', '主持人'], ['ctc', '聯絡人及電話'], ['att', '出席者'], ['obs', '列席者'], ['note', '備註（一行一點）', 'area']];
   function renderDocEdit() {
     var p = proj(cur.pid), d = docById(p, cur.did), cfg = docCfg(p);
@@ -1560,6 +1564,7 @@
       '<section class="card"><div class="grid g2">' + inp('main', '正本', '', d.main, 'dlCc') + inp('cc', '副本', '', d.cc, 'dlCc') + '</div>' +
       '<p class="muted">常用受文者與正副本清單在「公文收發」頁的「發文設定」。</p></section>' +
       '<div class="doc-acts"><button type="button" class="btn primary" id="btnDocPv">預覽／輸出 PDF</button><button type="button" class="btn ghost" id="btnDocDel">刪除此公文</button></div>';
+    var sh = $('docEditBody').querySelector('[data-k="short"]'); if (sh) sh.placeholder = '自動：' + shortSubj(Object.assign({}, d, { short: '' }));
     show('vDocEdit');
   }
   function docSet(d, k, v) { if (k.indexOf('meet.') === 0) d.meet[k.slice(5)] = v; else d[k] = v; }
@@ -1569,6 +1574,7 @@
     /* 改發文日期時，字號裡的民國年跟著更新（流水號不變） */
     if (k === 'date' && d.seq && e.target.value && d.no === docNo(cfg, d.date, d.seq)) { d.no = docNo(cfg, e.target.value, d.seq); var ni = $('docEditBody').querySelector('[data-k="no"]'); if (ni) ni.value = d.no; }
     docSet(d, k, e.target.value); save();
+    if (k === 'subj' || k === 'meet.reason') { var sh = $('docEditBody').querySelector('[data-k="short"]'); if (sh) sh.placeholder = '自動：' + shortSubj(Object.assign({}, d, { short: '' })); }
   });
   $('docEditBody').addEventListener('change', function (e) {
     if (e.target.id !== 'docCtc' || e.target.value === '') return;
@@ -1607,33 +1613,166 @@
     var wd = '日一二三四五六'[new Date(+m[1], m[2] - 1, +m[3]).getDay()];
     return '中華民國' + (m[1] - 1911) + '年' + (+m[2]) + '月' + (+m[3]) + '日（星期' + wd + '）' + m[4] + '時' + m[5] + '分';
   }
-  function renderDocPrint() {
-    var p = proj(cur.pid), d = docById(p, cur.did), co = company(), meet = d.kind === 'meet';
-    topbar('列印預覽', d.no, '返回修改');
-    var row = function (k, v, big) { return '<div class="gw-row' + (big ? ' big' : '') + '"><span class="gw-k">' + k + '：</span><span class="gw-v">' + v + '</span></div>'; };
+  /* ===== 公文輸出：依正本、副本各出一份（受文者不同），內部單位不另出；可跨頁、印章可拖曳 ===== */
+  var MM = 96 / 25.4, GW_TOP1 = 63.5, GW_TOPN = 25.5, GW_LIMIT = 271, GW_END = 42.1;
+  function splitUnits(t) { return String(t || '').split(/[、，,；;\n]+/).map(function (x) { return x.replace(/[（(][^）)]*[）)]/g, '').trim(); }).filter(Boolean); }
+  function internalUnit(n) { return /^(本所|本事務所|本公司|本處)/.test(n); }
+  function docCopies(d) {
+    var main = d.kind === 'meet' ? splitUnits(d.meet.att) : splitUnits(d.main), cc = splitUnits(d.cc), out = [], seen = {};
+    if (!main.length && d.to) main = [d.to];
+    main.forEach(function (u) { if (!internalUnit(u) && !seen[u]) { seen[u] = 1; out.push({ unit: u, kind: '正本' }); } });
+    cc.forEach(function (u) { if (!internalUnit(u) && !seen[u]) { seen[u] = 1; out.push({ unit: u, kind: '副本' }); } });
+    if (!out.length) out.push({ unit: d.to || '', kind: '正本' });
+    return out;
+  }
+  /* 檔名用簡易主旨：去掉「有關」、工程名稱與期望語，只留第一句 */
+  function shortSubj(d) {
+    if (d.short) return d.short;
+    var t = d.kind === 'meet' ? (d.meet.reason || '') : (d.subj || '');
+    t = t.replace(/[「『][^」』]*[」』]/g, '').replace(/^(有關|關於|檢陳|為)\s*/, '').replace(/^[案之的，、\s]+/, '');
+    t = t.split(/[，,。；]/)[0].replace(/乙案$|一案$|案$/, '').trim();
+    return t.slice(0, 30) || (d.kind === 'meet' ? '開會通知' : '函');
+  }
+  function docFileName(d) { var a = (d.date || '').split('-'); return (a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : '') + '_' + d.no + '_' + shortSubj(d); }
+  function gwBodyItems(d) {
+    var meet = d.kind === 'meet', row = function (k, v) { return '<div class="gw-row gw-b"><span class="gw-k">' + k + '：</span><span class="gw-v">' + v + '</span></div>'; };
+    var pts = function (t) { return pointsHtml(t).replace(/<div class="gw-p/g, '<div class="gw-b gw-p'); };
+    var h = meet
+      ? row('開會事由', esc(d.meet.reason)) + row('開會時間', meetTime(d.meet.time)) + row('開會地點', esc(d.meet.place)) + (d.meet.host ? row('主持人', esc(d.meet.host)) : '') + row('聯絡人及電話', esc(d.meet.ctc)) +
+        (d.meet.note ? row('備註', '') + pts(d.meet.note) : '')
+      : row('主旨', esc(d.subj)) + (lines(d.desc).length ? row('說明', '') + pts(d.desc) : '');
+    return h.replace('<div class="gw-row gw-b">', '<div class="gw-row gw-b gw-first">');
+  }
+  /* 量測每段高度後分頁：第一頁從受文者開始，續頁從上緣 25.5mm 開始；最後一頁底部保留正副本與負責人 */
+  function gwPaginate(d) {
+    var host = document.createElement('div'); host.className = 'paper gw-paper';
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden';
+    host.innerHTML = '<div class="gw gw-measure"><div class="gw-to">受文者：' + esc(d.to) + '</div><div class="gw-meta">' + gwMeta(d) + '</div>' + gwBodyItems(d) + '</div>';
+    document.body.appendChild(host);
+    var gw = host.firstChild, kids = Array.prototype.slice.call(gw.children), top0 = gw.getBoundingClientRect().top, prevEnd = null, items = [];
+    kids.forEach(function (el, i) {
+      var r = el.getBoundingClientRect(), mt = parseFloat(getComputedStyle(el).marginTop) || 0;
+      var s = (prevEnd == null ? r.top - mt : prevEnd) - top0, e = r.bottom - top0; prevEnd = r.bottom;
+      items.push({ html: el.outerHTML, h: (e - s) / MM, head: i < 2 });
+    });
+    host.remove();
+    var pages = [[]], y = GW_TOP1;
+    items.forEach(function (it) {
+      if (!it.head && y + it.h > GW_LIMIT && pages[pages.length - 1].length > (pages.length === 1 ? 2 : 0)) { pages.push([]); y = GW_TOPN; }
+      pages[pages.length - 1].push(it.html); y += it.h;
+    });
+    if (y + GW_END > GW_LIMIT) pages.push([]);
+    return pages;
+  }
+  function gwMeta(d) { return '發文日期：' + rocFull(d.date) + '<br>發文字號：' + esc(d.no) + '<br>速別：' + esc(d.speed) + '<br>密等及解密條件或保密期限：' + esc(d.secret) + '<br>附件：' + esc(d.att); }
+  function gwSealPos(d, n) { var s = d.sealPos || {}; return { pg: Math.min(Math.max(1, s.pg || n), n), x: s.x != null ? s.x : 124.7, y: s.y != null ? s.y : 237 }; }
+  function gwCopyHtml(d, co, copy, pages) {
+    var meet = d.kind === 'meet', n = pages.length, sp = gwSealPos(d, n);
     var dash = ''; for (var y = 0; y < 245; y += 2.4) dash += '<i style="top:' + y.toFixed(1) + 'mm"></i>';
-    var head = '<div class="gw-bind" aria-hidden="true">' + dash + '<span style="top:72.5mm">裝</span><span style="top:122.3mm">訂</span><span style="top:171mm">線</span></div>' +
-      '<div class="gw-file">檔　　號：<br>保存年限：</div>' +
-      '<h1 class="gw-title">' + esc(co.name) + '　' + (meet ? '開會通知單' : '函') + '</h1>' +
-      '<div class="gw-addr">地址：' + esc(co.addr) + '<br>案件聯絡人：' + esc(d.cName) + '<br>聯絡方式：' + esc(d.cTel) + (d.cMail ? '<br>電子信箱：' + esc(d.cMail) : '') + '</div>' +
-      '<div class="gw-to">受文者：' + esc(d.to) + '</div>' +
-      '<div class="gw-meta">發文日期：' + rocFull(d.date) + '<br>發文字號：' + esc(d.no) + '<br>速別：' + esc(d.speed) + '<br>密等及解密條件或保密期限：' + esc(d.secret) + '<br>附件：' + esc(d.att) + '</div>';
-    var body = meet
-      ? '<div class="gw-body">' + row('開會事由', esc(d.meet.reason), true) + row('開會時間', meetTime(d.meet.time), true) + row('開會地點', esc(d.meet.place), true) +
-        (d.meet.host ? row('主持人', esc(d.meet.host), true) : '') + row('聯絡人及電話', esc(d.meet.ctc), true) + '</div>' +
-        (d.meet.note ? '<div class="gw-body"><div class="gw-row big"><span class="gw-k">備註：</span><span class="gw-v"></span></div>' + pointsHtml(d.meet.note) + '</div>' : '')
-      : '<div class="gw-body">' + row('主旨', esc(d.subj), true) + (lines(d.desc).length ? '<div class="gw-row big"><span class="gw-k">說明：</span><span class="gw-v"></span></div>' + pointsHtml(d.desc) : '') + '</div>';
+    var bind = '<div class="gw-bind" aria-hidden="true">' + dash + '<span style="top:72.5mm">裝</span><span style="top:122.3mm">訂</span><span style="top:171mm">線</span></div>';
+    var head = '<div class="gw-file">檔　　號：<br>保存年限：</div><h1 class="gw-title">' + esc(co.name) + '　' + (meet ? '開會通知單' : '函') + '</h1>' +
+      '<div class="gw-addr">地址：' + esc(co.addr) + '<br>案件聯絡人：' + esc(d.cName) + '<br>聯絡方式：' + esc(d.cTel) + (d.cMail ? '<br>電子信箱：' + esc(d.cMail) : '') + '</div>';
     var cc = meet ? '<div class="gw-cc">出席者：' + esc(d.meet.att) + (d.meet.obs ? '<br>列席者：' + esc(d.meet.obs) : '') + '<br>副本：' + esc(d.cc) + '</div>'
       : '<div class="gw-cc">正本：' + esc(d.main) + '<br>副本：' + esc(d.cc) + '</div>';
-    var end = '<div class="gw-end">' + cc + (meet ? '' : '<div class="gw-head">負責人：' + esc(co.head) + '</div>') + (co.seal ? '<img class="gw-seal" alt="公司章" data-img="' + co.seal + '">' : '<span class="gw-noseal">（尚未上傳公司章）</span>') + '</div>';
-    var paper = $('paper'); paper.className = 'paper gw-paper';
-    paper.innerHTML = '<div class="gw">' + head + body + end + '<div class="gw-pg">第1頁　共1頁</div></div>';
-    fillImgs(paper);
+    var end = '<div class="gw-end">' + cc + (meet ? '' : '<div class="gw-head">負責人：' + esc(co.head) + '</div>') + '</div>';
+    var src = co.seal && thumbCache[co.seal];
+    var seal = d.sealOn ? (src ? '<img class="gw-seal-abs" alt="公司章" draggable="false" src="' + src + '" style="left:' + sp.x + 'mm;top:' + sp.y + 'mm">' : '<span class="gw-noseal">（尚未上傳公司章）</span>') : '';
+    return pages.map(function (items, i) {
+      var first = i === 0, last = i === n - 1;
+      var body = items.join('').replace('受文者：' + esc(d.to) + '</div>', '受文者：' + esc(copy.unit) + '</div>');
+      return '<section class="gw-sheet' + (first ? '' : ' rec-sec') + '"><div class="gw' + (first ? '' : ' gw-cont') + '" data-pg="' + (i + 1) + '">' + bind + (first ? head : '') + body + (last ? end : '') +
+        (i + 1 === sp.pg ? seal : '') + '<div class="gw-pg">第' + (i + 1) + '頁　共' + n + '頁</div></div></section>';
+    }).join('');
+  }
+  var gwPick = null;   // 目前勾選要輸出的份數（以單位名稱記）
+  function renderDocPrint() {
+    var p = proj(cur.pid), d = docById(p, cur.did), co = company();
+    topbar('列印預覽', d.no, '返回修改');
+    var copies = docCopies(d), off = d.copiesOff || [];
+    var sel = copies.filter(function (c) { return off.indexOf(c.unit) < 0; });
+    var paint = function () {
+      var pages = gwPaginate(d), paper = $('paper');
+      paper.className = 'paper gw-paper';
+      paper.innerHTML = (sel.length ? sel : copies.slice(0, 1)).map(function (c) { return gwCopyHtml(d, co, c, pages); }).join('').replace(/^<section class="gw-sheet rec-sec">/, '<section class="gw-sheet">');
+      Array.prototype.forEach.call(paper.querySelectorAll('.gw-sheet'), function (s, i) { if (i) s.classList.add('rec-sec'); });
+    };
+    $('gwBar').hidden = false;
+    $('gwBar').innerHTML = '<span class="gw-bar-k">輸出</span>' + copies.map(function (c, i) {
+      return '<label><input type="checkbox" data-copy="' + i + '"' + (off.indexOf(c.unit) < 0 ? ' checked' : '') + '>' + c.kind + '：' + esc(c.unit) + '</label>';
+    }).join('') + '<span class="gw-bar-k">用印</span><label><input type="checkbox" id="gwSealOn"' + (d.sealOn ? ' checked' : '') + '>電子章</label>' +
+      (d.sealOn ? '<button type="button" class="link" id="gwSealReset">印章回到預設位置</button><small class="muted">可直接拖曳印章；跨頁公文可拖到任一頁</small>' : '<small class="muted">不加章：印出後蓋實體章</small>');
+    gwPick = { d: d, copies: copies };
+    (co.seal && d.sealOn ? loadImg(co.seal) : Promise.resolve()).then(function () { if (cur.v === 'docPrint' && cur.did === d.id) paint(); });
+    paint();
     $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
-    $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會下載檔案' + (window.Cloud ? '，並同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。' : '。');
+    $('printHint').textContent = '「另存 PDF」每份各存一個檔案（檔名加上正本／副本與單位）' + (window.Cloud ? '，正本同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」' : '') + '。用瀏覽器列印時，紙張選 A4 直式。';
     gwFontCheck().then(function (ok) { if (cur.v === 'docPrint') gwFontBar(ok); });
     show('vPreview');
-    setDocName((meet ? '開會通知單_' : '函_') + d.no.replace(/號$/, '') + '_' + (meet ? d.meet.reason : d.subj).replace(/[「」『』]/g, '').slice(0, 24));
+    setDocName(docFileName(d));
+  }
+  $('gwBar').addEventListener('change', function (e) {
+    var d = gwPick && gwPick.d; if (!d) return;
+    if (e.target.dataset.copy != null) {
+      var u = gwPick.copies[+e.target.dataset.copy].unit, off = d.copiesOff = d.copiesOff || [];
+      if (e.target.checked) d.copiesOff = off.filter(function (x) { return x !== u; }); else if (off.indexOf(u) < 0) off.push(u);
+    }
+    if (e.target.id === 'gwSealOn') d.sealOn = e.target.checked;
+    save(); renderDocPrint();
+  });
+  $('gwBar').addEventListener('click', function (e) { if (e.target.id === 'gwSealReset' && gwPick) { delete gwPick.d.sealPos; save(); renderDocPrint(); } });
+  /* 拖曳印章：位置以 mm 記在公文上，所有份數共用 */
+  (function () {
+    var drag = null;
+    $('paper').addEventListener('pointerdown', function (e) {
+      var img = e.target.closest && e.target.closest('.gw-seal-abs'); if (!img || cur.v !== 'docPrint') return;
+      e.preventDefault(); img.setPointerCapture(e.pointerId);
+      var r = img.getBoundingClientRect(); drag = { img: img, dx: e.clientX - r.left, dy: e.clientY - r.top };
+    });
+    $('paper').addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var sheets = $('paper').querySelectorAll('.gw'), host = null;
+      Array.prototype.forEach.call(sheets, function (g) { var r = g.getBoundingClientRect(); if (e.clientY >= r.top && e.clientY <= r.bottom) host = g; });
+      host = host || drag.img.parentNode;
+      if (host !== drag.img.parentNode) host.appendChild(drag.img);
+      var hr = host.getBoundingClientRect(), k = hr.width / 210;
+      var x = Math.max(0, Math.min(210 - 20, (e.clientX - drag.dx - hr.left) / k)), y = Math.max(0, Math.min(297 - 20, (e.clientY - drag.dy - hr.top) / k));
+      drag.img.style.left = x.toFixed(1) + 'mm'; drag.img.style.top = y.toFixed(1) + 'mm'; drag.pos = { pg: +host.dataset.pg, x: +x.toFixed(1), y: +y.toFixed(1) };
+    });
+    var end = function () { if (!drag) return; if (drag.pos && gwPick) { gwPick.d.sealPos = drag.pos; save(); renderDocPrint(); } drag = null; };
+    $('paper').addEventListener('pointerup', end); $('paper').addEventListener('pointercancel', end);
+  })();
+  /* 另存 PDF：每一份各自一個檔案；正本歸檔雲端 */
+  function docPdfAll() {
+    var p = proj(cur.pid), d = docById(p, cur.did), co = company(), pages = gwPaginate(d), paper = $('paper'), keep = paper.innerHTML;
+    var copies = docCopies(d).filter(function (c) { return (d.copiesOff || []).indexOf(c.unit) < 0; });
+    if (!copies.length) copies = docCopies(d).slice(0, 1);
+    var base = docFileName(d), msgs = [], archived = false;
+    return copies.reduce(function (pr, c) {
+      return pr.then(function () {
+        paper.innerHTML = gwCopyHtml(d, co, c, pages);
+        return makePdf().then(function (blob) {
+          var name = base + '_' + c.kind + '_' + c.unit + '.pdf', a = document.createElement('a');
+          a.href = URL.createObjectURL(blob); a.download = name.replace(/[\\/:*?"<>|]+/g, '_'); document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+          msgs.push(name);
+          if (c.kind === '正本' && !archived) { archived = true; archiveDoc(blob, base + '.pdf'); }
+          return new Promise(function (res) { setTimeout(res, 400); });
+        });
+      });
+    }, Promise.resolve()).then(function () { paper.innerHTML = keep; return msgs; });
+  }
+  function archiveDoc(blob, fname) {
+    var p = proj(cur.pid), d = docById(p, cur.did); if (!d || !window.Cloud || !window.Cloud.putDoc) return;
+    var rd = new FileReader();
+    rd.onload = function () {
+      window.Cloud.putDoc({ proj: p.info.name, dir: '發文', name: fname, data: String(rd.result).split(',')[1], mime: 'application/pdf', old: d.fileId || '' }).then(function (res) {
+        d.fileId = res.id; d.url = res.url; d.archivedAt = Date.now(); save();
+        $('pdfMsg').textContent += ' 正本已歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。';
+      }).catch(function (e) {
+        $('pdfMsg').textContent += /putDoc|not found|找不到|Script function/i.test(e.message) ? ' 雲端歸檔需要先更新 Apps Script（依說明重新部署）。' : ' 雲端歸檔失敗：' + e.message;
+      });
+    };
+    rd.readAsDataURL(blob);
   }
   /* 公文字型：先用本機字型名稱（local()）；Chrome 等瀏覽器讀不到時，改讀取本機標楷體字型檔，存在這台裝置（不上傳） */
   var GW_PS = 'DFKaiShu-SB-Estd-BF', gwFontOk = null;
@@ -1717,20 +1856,6 @@
     if (e.target.id !== 'gwFontFile' || !e.target.files[0]) return;
     e.target.files[0].arrayBuffer().then(gwSaveBuf);
   });
-  function archiveDoc(blob) {
-    var p = proj(cur.pid), d = docById(p, cur.did); if (!d || !window.Cloud || !window.Cloud.putDoc) return;
-    var rd = new FileReader();
-    rd.onload = function () {
-      $('pdfMsg').textContent += ' 歸檔到雲端中…';
-      window.Cloud.putDoc({ proj: p.info.name, dir: '發文', name: docName + '.pdf', data: String(rd.result).split(',')[1], mime: 'application/pdf', old: d.fileId || '' }).then(function (res) {
-        d.fileId = res.id; d.url = res.url; d.archivedAt = Date.now(); save();
-        $('pdfMsg').textContent = '已下載並歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」。';
-      }).catch(function (e) {
-        $('pdfMsg').textContent = /putDoc|not found|找不到|Script function/i.test(e.message) ? '已下載；雲端歸檔需要先更新 Apps Script（依說明重新部署）。' : '已下載；雲端歸檔失敗：' + e.message;
-      });
-    };
-    rd.readAsDataURL(blob);
-  }
 
   /* ========== 抽查總表：截至某日的材料進場抽驗、分項施工抽查、缺失改善追蹤（格式依月進度會議報告） ========== */
   var sumOut = {};

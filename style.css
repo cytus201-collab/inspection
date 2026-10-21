@@ -595,7 +595,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .gw-row{display:flex}
 .gw-k{white-space:nowrap}
 .gw-v{flex:1;min-width:0;word-break:break-all;white-space:pre-line}
-.gw-p1,.gw-p2{display:grid;grid-template-columns:7.3mm 1fr;margin-left:8.1mm;line-height:9mm}
+.gw-p1,.gw-p2{display:grid;grid-template-columns:minmax(7.3mm,max-content) 1fr;margin-left:8.1mm;line-height:9mm}
 .gw-row+.gw-p1{margin-top:3mm}
 .gw-p1+.gw-p1{margin-top:1.5mm}
 .gw-p1.one{grid-template-columns:0 1fr}
@@ -610,3 +610,17 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media print{.paper.gw-paper{width:210mm;padding:0;margin:0}.gw{min-height:296mm;height:296mm}}
 .gw-font{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px auto 0;max-width:210mm;padding:10px 12px;border:1.5px solid #e0b84a;background:#fff8e6;color:#4a3800;border-radius:8px;font-size:14px;font-weight:700}
 .gw-font small{flex-basis:100%;font-weight:400}
+/* v47 公文：分頁、份數、印章拖曳 */
+.gw-b{font-size:16pt;line-height:9.1mm}
+.gw-row.gw-first{margin-top:5.3mm}
+.gw-p1.gw-b,.gw-p2.gw-b{line-height:9mm}
+.gw.gw-cont{padding-top:25.5mm}
+.gw-seal-abs{position:absolute;height:33.6mm;cursor:grab;touch-action:none;z-index:2;user-select:none;-webkit-user-drag:none}
+.gw-seal-abs:active{cursor:grabbing}
+.gw-noseal{position:absolute;right:33mm;bottom:40mm}
+.gw-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:14px;font-weight:700}
+.gw-bar label{display:flex;align-items:center;gap:4px;font-weight:600}
+.gw-bar-k{color:var(--muted)}
+.gw-bar small{font-weight:400}
+.paper.gw-paper .gw-sheet.rec-sec{margin-top:6mm;border-top:1px dashed var(--line)}
+@media print{.paper.gw-paper .gw-sheet.rec-sec{margin-top:0;border-top:0;break-before:page}.paper.gw-paper .gw-sheet{break-inside:avoid}}
