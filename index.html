@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=52">
+<link rel="stylesheet" href="style.css?v=53">
 </head>
 <body>
 
@@ -26,18 +26,19 @@
 
 <nav class="rail noprint" id="rail" aria-label="主選單">
   <div class="rail-logo" role="img" aria-label="公司圖標"><svg viewBox="0 0 100 100"><defs><clipPath id="lgc"><circle cx="50" cy="50" r="50"/></clipPath></defs><circle cx="50" cy="50" r="50" fill="#141414"/><path d="M-2 46.5 L102 50.5" stroke="#fff" stroke-width="3" clip-path="url(#lgc)"/></svg></div>
-  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
-  <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
   <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg>工程</button>
+  <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
+  <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
   <button type="button" data-nav="docs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/></svg>公文</button>
-  <button type="button" data-nav="daily"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日報</button>
+  <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M7 6H5v15h14V6h-2"/><path d="M9 13l2 2 4-4"/></svg>抽查</button>
   <button type="button" data-nav="materials"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg>材料</button>
+  <button type="button" data-nav="daily"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日報</button>
   <button type="button" data-nav="settings" class="rail-end"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>設定</button>
 </nav>
 <nav class="tabs noprint" id="tabs" aria-label="底部導覽">
   <button type="button" data-nav="field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>今日</button>
   <button type="button" data-nav="project"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>日曆</button>
-  <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M9 9h6M9 13h6M9 17h3"/></svg>工項</button>
+  <button type="button" data-nav="works"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6v3H9z"/><path d="M7 6H5v15h14V6h-2"/><path d="M9 13l2 2 4-4"/></svg>抽查</button>
   <button type="button" data-nav="office"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>總覽</button>
 </nav>
 
@@ -117,17 +118,9 @@
   </section>
 
   <div class="dirs">
-    <section aria-labelledby="h-works">
-      <h2 class="h" id="h-works">工項目錄</h2>
-      <details class="work-pick" id="workPickBox">
-        <summary>選擇本工程要抽查的工項</summary>
-        <div class="checks" id="workPick"></div>
-        <button type="button" class="link" id="btnWorkAll">全部顯示</button>
-        <button type="button" class="link" id="btnWorkOrder">恢復預設排序</button>
-        <button type="button" class="link" id="btnStd">⚙ 抽查標準（本工程）</button>
-      </details>
-      <p class="muted sort-hint">長按工項卡片可拖曳調整順序。</p>
-      <div id="workGrid" class="work-grid"></div>
+    <section aria-labelledby="h-recs">
+      <h2 class="h" id="h-recs">施工抽查</h2>
+      <button type="button" class="mat-dir" id="recDir"></button>
     </section>
     <section aria-labelledby="h-mats">
       <h2 class="h" id="h-mats">材料抽查管制</h2>
@@ -357,6 +350,22 @@
   </section>
 </main>
 
+<!-- ===== 施工抽查（工項目錄） ===== -->
+<main id="vWorks" class="view wrap wide" hidden>
+    <section aria-labelledby="h-works">
+      <h2 class="h" id="h-works">工項目錄</h2>
+      <details class="work-pick" id="workPickBox">
+        <summary>選擇本工程要抽查的工項</summary>
+        <div class="checks" id="workPick"></div>
+        <button type="button" class="link" id="btnWorkAll">全部顯示</button>
+        <button type="button" class="link" id="btnWorkOrder">恢復預設排序</button>
+        <button type="button" class="link" id="btnStd">⚙ 抽查標準（本工程）</button>
+      </details>
+      <p class="muted sort-hint">長按工項卡片可拖曳調整順序。</p>
+      <div id="workGrid" class="work-grid"></div>
+    </section>
+</main>
+
 <!-- ===== 公文收發 ===== -->
 <main id="vDocs" class="view wrap" hidden>
   <section class="card">
@@ -396,10 +405,33 @@
 <main id="vDaily" class="view wrap" hidden>
   <section class="card">
     <div class="cal-head"><button type="button" class="btn ghost sm" id="drPrev" aria-label="上個月">‹</button><h2 class="h small" id="drMonth"></h2><button type="button" class="btn ghost sm" id="drNext" aria-label="下個月">›</button>
-      <button type="button" class="btn primary sm" id="drPrintMonth" style="margin-left:auto">整月列印／PDF</button></div>
+      <button type="button" class="btn ghost sm" id="drImportBtn" style="margin-left:auto">匯入施工日誌</button><button type="button" class="btn primary sm" id="drPrintMonth">整月列印／PDF</button></div>
     <p class="draft-note" id="drWarn" hidden>報表編號、累計與剩餘工期需要「開工日期」與「契約工期」。<button type="button" class="link" id="drInfoBtn">前往工程基本資料</button></p>
     <div id="drList" class="dr-list"></div>
   </section>
+</main>
+<main id="vDrImport" class="view wrap wide" hidden>
+  <section class="card"><h2 class="h small">步驟一：選擇匯入工程</h2>
+    <div class="grid"><label class="f">工程名稱<select id="driProj"></select></label>
+      <label class="f">重複資料處理<select id="driDup"><option value="over">覆蓋既有紀錄</option><option value="skip">略過已有日報</option></select></label></div></section>
+  <section class="card"><h2 class="h small">步驟二：載入 Excel 施工日誌</h2>
+    <div class="dri-drop" id="driDrop" role="button" tabindex="0"><b>點擊或拖曳 .xlsx／.xls 檔案到此處</b><span class="muted">系統會自動偵測「標準單日頁籤」或「垂直堆疊（同一張表整月）」格式；可一次放多個檔案</span><input type="file" id="driFile" accept=".xlsx,.xls,.xlsm" multiple hidden></div>
+    <p class="muted" id="driFilesInfo"></p>
+    <div class="grid g4">
+      <label class="f">解析引擎<select id="driEngine"><option value="auto">自動偵測</option><option value="sheet">標準單日頁籤</option><option value="stack">垂直堆疊</option></select></label>
+      <label class="f">讀取最大欄位<input id="driMax" type="number" min="10" max="200"></label>
+      <label class="f">日期搜尋關鍵字<input id="dri_date"></label>
+      <label class="f">工程項目關鍵字<input id="dri_item"></label>
+      <label class="f">數量關鍵字<input id="dri_qty"></label>
+      <label class="f">單位關鍵字<input id="dri_unit"></label>
+      <label class="f">天氣關鍵字<input id="dri_weather"></label>
+      <label class="f">黑名單（自動剔除）<input id="dri_black"></label>
+    </div>
+    <div class="btn-row"><label class="chk"><input type="checkbox" id="driZero"><span>刪除數量為 0 的項目</span></label><button type="button" class="btn primary sm" id="driGo" disabled>開始解析</button></div></section>
+  <section class="card"><div class="ov-card-h" style="padding:0"><h2 class="h small">步驟三：解析結果預覽</h2><button type="button" class="btn primary sm" id="driWrite" disabled>確認寫入日報</button></div>
+    <p class="muted" id="driMsg" role="status"></p>
+    <div id="driPv"></div>
+    <pre class="dri-log" id="driLog" aria-label="解析紀錄"></pre></section>
 </main>
 <main id="vDailyEdit" class="view wrap" hidden>
   <div id="drEditBody"></div>
@@ -571,9 +603,9 @@
   </div>
 </div>
 
-<script src="data.js?v=52"></script>
-<script src="mat-parse.js?v=52"></script>
-<script src="cloud.js?v=52"></script>
-<script src="app.js?v=52"></script>
+<script src="data.js?v=53"></script>
+<script src="mat-parse.js?v=53"></script>
+<script src="cloud.js?v=53"></script>
+<script src="app.js?v=53"></script>
 </body>
 </html>

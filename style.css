@@ -791,3 +791,13 @@ button.kpi{cursor:pointer}
 @media (max-width:960px){html,body{overflow-x:hidden;max-width:100%}.view{max-width:100vw}}
 .fd-proj select{max-width:100%;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
 .doc-t b,.doc-t small{display:block;max-width:100%}
+/* v53 施工日誌匯入 */
+.grid.g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.dri-drop{border:1.5px dashed #bdbdbd;border-radius:12px;padding:22px;text-align:center;display:flex;flex-direction:column;gap:4px;cursor:pointer;background:#fafafa}
+.dri-drop.over{border-color:var(--strong);background:#f0f0f0}
+.dri-tbl{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--hair);border-radius:10px}
+.dri-tbl table{width:100%;border-collapse:collapse;font-size:13px}
+.dri-tbl th,.dri-tbl td{border-bottom:1px solid #eee;padding:6px 8px;text-align:left;vertical-align:top}
+.dri-tbl th{position:sticky;top:0;background:#f7f7f7;font-weight:600}
+.dri-tbl .nw{white-space:nowrap}
+.dri-log{background:#141414;color:#e6e6e6;border-radius:10px;padding:12px;font-size:12px;line-height:1.5;max-height:220px;overflow:auto;white-space:pre-wrap;margin:0;min-height:60px}

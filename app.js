@@ -223,7 +223,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit', 'vField'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit', 'vField', 'vDrImport', 'vWorks'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -276,7 +276,7 @@
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
-      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint, field: renderField
+      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint, field: renderField, works: renderWorks, drImport: renderDrImport
     })[cur.v]();
     coEdit(); markNav();
     if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
@@ -338,14 +338,14 @@
     if (k === 'field') return go({ v: 'field' });
     if (!p) return go({ v: 'projects' });
     if (k === 'project') return go({ v: 'project', pid: p.id });
-    if (k === 'works') { go({ v: 'project', pid: p.id }); setTimeout(function () { var g = $('workGrid'); if (g) g.scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (k === 'works') return go({ v: 'works', pid: p.id });
     if (k === 'docs') return go({ v: 'docs', pid: p.id });
     if (k === 'daily') return go({ v: 'daily', pid: p.id, ym: today().slice(0, 7) });
     if (k === 'materials') return go({ v: 'materials', pid: p.id });
   }
   ['rail', 'tabs'].forEach(function (id) { $(id).addEventListener('click', function (e) { var b = e.target.closest('[data-nav]'); if (b) navTo(b.dataset.nav); }); });
   function markNav() {
-    var v = cur.v, k = v === 'projects' ? 'office' : v === 'field' ? 'field' : /^doc/.test(v) ? 'docs' : /^daily/.test(v) ? 'daily' : /^mat/.test(v) ? 'materials' : 'project';
+    var v = cur.v, k = v === 'projects' ? 'office' : v === 'field' ? 'field' : /^doc/.test(v) ? 'docs' : /^(daily|drImport)/.test(v) ? 'daily' : /^mat/.test(v) ? 'materials' : /^(works|work|form|preview|std|dwgs|dwg)/.test(v) ? 'works' : 'project';
     document.querySelectorAll('#rail [data-nav], #tabs [data-nav]').forEach(function (b) { b.classList.toggle('on', b.dataset.nav === k); });
     if (cur.pid) lsSet('last-pid', cur.pid);
   }
@@ -454,7 +454,7 @@
     if (ds.fstart) return startPlan(p, ds.fstart);
     if (ds.fgo === 'ng') { var t = today(); return go({ v: 'sumPrint', pid: p.id, to: t, from: sumFromDef(t), kind: 'ng' }); }
     if (ds.fgo === 'daily') return go({ v: 'dailyEdit', pid: p.id, date: today() });
-    if (ds.fq === 'rec') { go({ v: 'project', pid: p.id }); setTimeout(function () { var g = $('workGrid'); if (g) g.scrollIntoView({ block: 'start' }); }, 30); return; }
+    if (ds.fq === 'rec') return go({ v: 'works', pid: p.id });
     if (ds.fq === 'mat') return go({ v: 'materials', pid: p.id });
     if (ds.fq === 'plan') { calSel = today(); var d0 = new Date(); calY = d0.getFullYear(); calM = d0.getMonth(); go({ v: 'project', pid: p.id }); setTimeout(function () { var pa = document.querySelector('#calDay .plan-add'); if (pa) { pa.open = true; pa.scrollIntoView({ block: 'center' }); } }, 40); return; }
     if (ds.openrec) { var a2 = ds.openrec.split('|'); return go({ v: 'form', pid: p.id, wid: a2[0], rid: a2[1] }); }
@@ -463,6 +463,7 @@
     if (ds.openmat) return go({ v: 'matItem', pid: p.id, mid: ds.openmat });
   });
 
+  $('recDir').addEventListener('click', function () { go({ v: 'works', pid: cur.pid }); });
   $('projectList').addEventListener('click', function (e) {
     var b = e.target.closest('[data-pid]'); if (b) go({ v: 'project', pid: b.dataset.pid });
   });
@@ -529,9 +530,9 @@
     };
     return D.works.slice().sort(function (a, b) { return rank(a) - rank(b) || base[a.id] - base[b.id]; });
   }
-  function renderProject() {
-    var p = proj(cur.pid), I = p.info;
-    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '總覽');
+  function renderWorks() {
+    var p = proj(cur.pid);
+    topbar('施工抽查', p.info.name || '未命名工程', '工程');
     var on = enabledWorks(p);
     $('workPick').innerHTML = orderedWorks(p).map(function (w) {
       return '<label class="chk"><input type="checkbox" data-wsel="' + w.id + '"' + (on.indexOf(w) >= 0 ? ' checked' : '') + '><span>' + esc(w.name) + '</span></label>';
@@ -548,6 +549,22 @@
         '<span class="wc-meta">' + meta + '</span>' + (ng ? '<span class="wc-ng">' + ng + ' 份有缺失</span>' : '') + '</button>';
     }).join('');
 
+    show('vWorks');
+  }
+  function renderProject() {
+    var p = proj(cur.pid), I = p.info;
+    topbar(I.name || '未命名工程', [I.code, I.contractor].filter(Boolean).join(' · '), '總覽');
+    /* 施工抽查進度（工項目錄在「施工抽查」頁） */
+    var on = enabledWorks(p), tot = 0, ngR = 0, ph = [0, 0, 0], wk = 0, ws0 = wkStart(today()), we0 = addDays(ws0, 6), used = 0;
+    on.forEach(function (w) {
+      var list = (p.recs[w.id] || []).filter(function (r) { return !r.draft; }); if (list.length) used++;
+      list.forEach(function (r) { tot++; if (stats(w, r).ng) ngR++; if (w.kind === 'phased') ph[r.phase]++; if (r.checkDate >= ws0 && r.checkDate <= we0) wk++; });
+    });
+    var openN = openDefs(p).length, plN = (p.plans || []).filter(function (pl) { return !pl.rid && pl.date >= today(); }).length;
+    $('recDir').innerHTML = '<span class="md-big">' + tot + '<small> 份</small></span><span class="md-lbl">已完成施工抽查（' + used + ' 個工項）</span>' +
+      '<span class="md-meta">施工前 ' + ph[0] + ' · 施工中 ' + ph[1] + ' · 施工完成 ' + ph[2] + ' · 本週 ' + wk + ' 份</span>' +
+      '<span class="md-meta">' + (ngR ? '有缺失 ' + ngR + ' 份 · ' : '') + (openN ? '<b>未改善 ' + openN + ' 項</b>' : '缺失皆已改善') + (plN ? ' · 預定待抽查 ' + plN + ' 項' : '') + '</span>' +
+      '<span class="md-go">進入施工抽查 ›</span>';
     var c = {}; MSTAT_ORDER.forEach(function (s) { c[s] = 0; }); p.mats.forEach(function (m) { c[matStatus(m)]++; });
     var n = p.mats.length, done = c.ok + c.ng;
     $('matDir').innerHTML = n ?
@@ -576,9 +593,9 @@
     var p = proj(cur.pid), sel = p.works ? p.works.slice() : D.works.map(function (w) { return w.id; });
     if (e.target.checked) { if (sel.indexOf(id) < 0) sel.push(id); } else sel = sel.filter(function (x) { return x !== id; });
     p.works = D.works.map(function (w) { return w.id; }).filter(function (x) { return sel.indexOf(x) >= 0; });
-    save(); var open = $('workPickBox').open; renderProject(); $('workPickBox').open = open;
+    save(); var open = $('workPickBox').open; renderWorks(); $('workPickBox').open = open;
   });
-  $('btnWorkOrder').addEventListener('click', function () { var p = proj(cur.pid), sy = window.scrollY; delete p.wOrder; save(); renderProject(); window.scrollTo(0, sy); $('workPickBox').open = true; });
+  $('btnWorkOrder').addEventListener('click', function () { var p = proj(cur.pid), sy = window.scrollY; delete p.wOrder; save(); renderWorks(); window.scrollTo(0, sy); $('workPickBox').open = true; });
   /* 長按後拖曳排序（手機、電腦皆可）：工項卡片、照片共用 */
   function makeSortable(grid, sel, onEnd, handleSel) {
     var timer = null, st = null, justDragged = false;
@@ -634,9 +651,9 @@
     /* 隱藏的工項維持在原本相鄰位置之後 */
     var next = shown.slice();
     hidden.forEach(function (id) { var i = all.indexOf(id), prev = null; for (var k = i - 1; k >= 0; k--) if (next.indexOf(all[k]) >= 0) { prev = all[k]; break; } next.splice(prev ? next.indexOf(prev) + 1 : 0, 0, id); });
-    p.wOrder = next; save(); var sy = window.scrollY; renderProject(); window.scrollTo(0, sy);
+    p.wOrder = next; save(); var sy = window.scrollY; renderWorks(); window.scrollTo(0, sy);
   });
-  $('btnWorkAll').addEventListener('click', function () { var p = proj(cur.pid); delete p.works; save(); renderProject(); $('workPickBox').open = true; });
+  $('btnWorkAll').addEventListener('click', function () { var p = proj(cur.pid); delete p.works; save(); renderWorks(); $('workPickBox').open = true; });
   $('workGrid').addEventListener('click', function (e) {
     if (e.target.closest('[data-dwgs]')) { go({ v: 'dwgs', pid: cur.pid }); return; }
     var b = e.target.closest('[data-wid]'); if (b) go({ v: 'work', pid: cur.pid, wid: b.dataset.wid });
@@ -2134,6 +2151,7 @@
   $('drPrev').addEventListener('click', function () { var a = (cur.ym || today().slice(0, 7)).split('-'), d = new Date(+a[0], +a[1] - 2, 1); cur.ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); go(cur, true); });
   $('drNext').addEventListener('click', function () { var a = (cur.ym || today().slice(0, 7)).split('-'), d = new Date(+a[0], +a[1], 1); cur.ym = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); go(cur, true); });
   $('drList').addEventListener('click', function (e) { var b = e.target.closest('[data-dr]'); if (b) go({ v: 'dailyEdit', pid: cur.pid, date: b.dataset.dr }); });
+  $('drImportBtn').addEventListener('click', function () { go({ v: 'drImport', pid: cur.pid }); });
   $('drPrintMonth').addEventListener('click', function () { go({ v: 'dailyPrint', pid: cur.pid, ym: cur.ym || today().slice(0, 7) }); });
   $('drInfoBtn').addEventListener('click', function () { go({ v: 'project', pid: cur.pid }); setTimeout(function () { var b = $('infoCard'); if (b) { b.open = true; b.scrollIntoView({ block: 'start' }); } }, 50); });
   /* ---- 單日編輯 ---- */
@@ -2197,6 +2215,173 @@
     var a = (cur.date || cur.ym + '-01').split('-');
     setDocName(cur.date ? '監造日報_' + (a[0] - 1911) + '.' + a[1] + a[2] + '_' + (p.info.name || '') : '監造日報_' + (a[0] - 1911) + '年' + (+a[1]) + '月_' + (p.info.name || ''));
   }
+
+  /* ========== 施工日誌匯入（照同事系統：選工程 → 載入 Excel、解析引擎與關鍵字 → 預覽 → 確認寫入） ========== */
+  var DRI_DEF = { maxCol: 50, date: '日期,施工日期,中華民國,填表日期', item: '工程項目,施工項目,工作項目,項目名稱', qty: '本日完成數量,數量,今日數量,施作數量', unit: '單位', weather: '天氣,氣候', black: '品質管理,品管費,利潤,稅雜費,稅管費,管理費,保險費,營業稅,小計,合計,總計', zero: true, engine: 'auto', dup: 'over' };
+  function driCfg() { var c = {}; try { c = JSON.parse(lsGet('dr-import-cfg') || '{}'); } catch (e) {} return Object.assign({}, DRI_DEF, c); }
+  var driFiles = [], driResult = null;
+  function renderDrImport() {
+    var p = proj(cur.pid), c = driCfg();
+    topbar('匯入施工日誌', p.info.name || '', '日報月表');
+    $('driProj').innerHTML = S.projects.map(function (x) { return '<option value="' + x.id + '"' + (x.id === p.id ? ' selected' : '') + '>' + esc(x.info.name || '未命名工程') + '</option>'; }).join('');
+    $('driDup').value = c.dup; $('driEngine').value = c.engine; $('driMax').value = c.maxCol;
+    ['date', 'item', 'qty', 'unit', 'weather', 'black'].forEach(function (k) { $('dri_' + k).value = c[k]; });
+    $('driZero').checked = !!c.zero;
+    $('driFilesInfo').textContent = driFiles.length ? '已選 ' + driFiles.length + ' 個檔案：' + driFiles.map(function (f) { return f.name; }).join('、') : '';
+    $('driGo').disabled = !driFiles.length;
+    driPaint();
+    show('vDrImport');
+  }
+  function driSaveCfg() {
+    var c = { dup: $('driDup').value, engine: $('driEngine').value, maxCol: +$('driMax').value || 50, zero: $('driZero').checked };
+    ['date', 'item', 'qty', 'unit', 'weather', 'black'].forEach(function (k) { c[k] = $('dri_' + k).value; });
+    lsSet('dr-import-cfg', JSON.stringify(c)); return Object.assign({}, DRI_DEF, c);
+  }
+  ['driDup', 'driEngine', 'driMax', 'driZero', 'dri_date', 'dri_item', 'dri_qty', 'dri_unit', 'dri_weather', 'dri_black'].forEach(function (id) { $(id).addEventListener('change', driSaveCfg); });
+  $('driProj').addEventListener('change', function () { cur.pid = $('driProj').value; go(cur, true); });
+  function driPick(files) { driFiles = Array.prototype.slice.call(files || []).filter(function (f) { return /\.(xlsx|xls|xlsm)$/i.test(f.name); }); driResult = null; renderDrImport(); }
+  $('driFile').addEventListener('change', function () { driPick($('driFile').files); $('driFile').value = ''; });
+  $('driDrop').addEventListener('dragover', function (e) { e.preventDefault(); $('driDrop').classList.add('over'); });
+  $('driDrop').addEventListener('dragleave', function () { $('driDrop').classList.remove('over'); });
+  $('driDrop').addEventListener('drop', function (e) { e.preventDefault(); $('driDrop').classList.remove('over'); driPick(e.dataTransfer.files); });
+  $('driDrop').addEventListener('click', function (e) { if (e.target.id !== 'driFile') $('driFile').click(); });
+  /* ---- 解析 ---- */
+  function kws(s) { return String(s || '').split(/[,，、\s]+/).filter(Boolean); }
+  function txt(v) { return v == null ? '' : v instanceof Date ? v.toISOString() : String(v).replace(/\s+/g, ''); }
+  function hasKw(v, list) { var t = txt(v); return list.some(function (k) { return t.indexOf(k) >= 0; }); }
+  function toDate(v) {
+    if (v instanceof Date && !isNaN(v)) { if (v.getFullYear() < 1990) return ''; var t = new Date(v.getTime() - v.getTimezoneOffset() * 60000); return t.toISOString().slice(0, 10); }
+    if (typeof v === 'number' && v > 20000 && v < 80000) { var d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0, 10); }
+    var s = String(v || '').replace(/\s+/g, ''), m;
+    if ((m = /(\d{2,4})[年\/.-](\d{1,2})[月\/.-](\d{1,2})/.exec(s))) { var y = +m[1]; if (y < 1911) y += 1911; return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2); }
+    return '';
+  }
+  function num(v) { if (typeof v === 'number') return v; var s = String(v == null ? '' : v).replace(/[,\s]/g, ''); return s === '' || isNaN(+s) ? null : +s; }
+  /* 進度：儲存格若以百分比格式顯示就照顯示值；標題有「(%)」者數值已是百分比；否則 0～1 的小數視為比例 */
+  function pctCell(row, ci, label) {
+    for (var j = ci + 1; j < row.length; j++) {
+      var v = num(row[j]); if (v == null) continue;
+      var s = String((row.shown || [])[j] || '');
+      if (/%$/.test(s.trim())) return parseFloat(s);
+      return /[%％]/.test(label) || v > 1 ? v : v * 100;
+    }
+    return '';
+  }
+  function after(row, i, test) { for (var j = i + 1; j < row.length; j++) { if (row[j] !== '' && row[j] != null) { if (!test || test(row[j])) return row[j]; } } return ''; }
+  function driBlock(rows, c, log, where) {
+    var K = { date: kws(c.date), item: kws(c.item), qty: kws(c.qty), unit: kws(c.unit), weather: kws(c.weather), black: kws(c.black) };
+    var out = { date: '', wAm: '', wPm: '', plan: '', act: '', items: [] }, hdr = -1, col = {};
+    rows.forEach(function (row, ri) {
+      row.forEach(function (v, ci) {
+        var t = txt(v); if (!t) return;
+        if (!out.date && /填表日期|報表日期|施工日期|^日期/.test(t)) { var dv = after(row, ci, function (x) { return !!toDate(x); }); if (dv) out.date = toDate(dv); }
+        if (!out.wAm && /上午/.test(t) && row.slice(0, ci + 1).some(function (x) { return hasKw(x, K.weather); })) out.wAm = String(after(row, ci, function (x) { return !/下午/.test(txt(x)); }) || '').trim();
+        if (!out.wPm && /下午/.test(t) && row.slice(0, ci + 1).some(function (x) { return hasKw(x, K.weather); })) out.wPm = String(after(row, ci, function (x) { return !/填表|日期/.test(txt(x)); }) || '').trim();
+        /* 標題有「(%)」者數值已是百分比；否則 0～1 的小數視為比例 */
+        if (out.plan === '' && /預定進度/.test(t)) out.plan = pctCell(row, ci, t);
+        if (out.act === '' && /實際進度/.test(t)) out.act = pctCell(row, ci, t);
+      });
+      var shortCell = function (v) { var t = txt(v); return t && t.length <= 12; };
+      if (hdr < 0 && row.some(function (v) { return shortCell(v) && hasKw(v, K.item); }) && row.some(function (v) { return shortCell(v) && hasKw(v, K.qty) && !hasKw(v, K.item); })) {
+        hdr = ri;
+        row.forEach(function (v, ci) {
+          var t = txt(v);
+          if (txt(v).length > 12) return;
+          if (col.item == null && hasKw(v, K.item)) col.item = ci;
+          if (col.unit == null && hasKw(v, K.unit)) col.unit = ci;
+          if (col.contract == null && /契約數量/.test(t)) col.contract = ci;
+          if (col.cum == null && /累計/.test(t)) col.cum = ci;
+          if (col.qty == null && /本日|今日/.test(t) && hasKw(v, K.qty)) col.qty = ci;
+        });
+        if (col.qty == null) row.forEach(function (v, ci) { if (col.qty == null && hasKw(v, K.qty) && ci !== col.cum && ci !== col.contract) col.qty = ci; });
+      }
+    });
+    if (out.date === '') { log.push('⚠ ' + where + '：找不到日期，略過'); return null; }
+    if (hdr < 0) { log.push('⚠ ' + where + '（' + out.date + '）：找不到施工項目表頭'); return out; }
+    for (var r = hdr + 1; r < rows.length; r++) {
+      var row = rows[r], name = txt(row[col.item]) ? String(row[col.item]).trim() : '';
+      var first = txt(row.find(function (x) { return txt(x); }) || '');
+      if (/^[一二三四五六七八九十]、/.test(first) || /營造業專業工程|材料名稱|工別/.test(first)) break;
+      if (!name || /^[A-ZＡ-Ｚ][.．]?$/.test(name)) continue;
+      if (K.black.some(function (k) { return name.indexOf(k) >= 0; })) continue;
+      var q = num(row[col.qty]);
+      if (c.zero && !q) continue;
+      out.items.push({ name: name.replace(/\s+$/, ''), unit: col.unit != null ? String(row[col.unit] || '').trim() : '', qty: q == null ? '' : String(q), cum: col.cum != null && num(row[col.cum]) != null ? String(num(row[col.cum])) : '', contract: col.contract != null && num(row[col.contract]) != null ? String(num(row[col.contract])) : '' });
+    }
+    return out;
+  }
+  function driParseBook(wb, name, c, log) {
+    var days = [], X = window.XLSX;
+    var sheets = wb.SheetNames.map(function (sn) {
+      var ws = wb.Sheets[sn], rows = X.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true }).map(function (r) { return r.slice(0, c.maxCol); });
+      var shown = X.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '', blankrows: true });
+      rows.forEach(function (r, i) { r.shown = shown[i] || []; });   // 儲存格顯示的文字（判斷是否為百分比格式）
+      return { sn: sn, rows: rows };
+    });
+    var isDiary = function (rows) { return rows.slice(0, 15).some(function (r) { return r.some(function (v) { return /施工日誌/.test(txt(v)); }); }); };
+    var perSheet = sheets.filter(function (s) { return isDiary(s.rows) && s.rows.length < 120; });
+    var engine = c.engine === 'auto' ? (perSheet.length >= 2 ? 'sheet' : 'stack') : c.engine;
+    log.push('■ ' + name + '：' + (engine === 'sheet' ? '標準單日頁籤' : '垂直堆疊') + '（' + wb.SheetNames.length + ' 張工作表）');
+    if (engine === 'sheet') sheets.forEach(function (s) {
+      if (!isDiary(s.rows)) { log.push('　略過工作表「' + s.sn + '」（不是施工日誌）'); return; }
+      var d = driBlock(s.rows, c, log, '「' + s.sn + '」'); if (d) days.push(d);
+    });
+    else sheets.forEach(function (s) {
+      var starts = []; s.rows.forEach(function (r, i) { var f = txt(r.find(function (x) { return txt(x); }) || ''); if (/施工日誌$/.test(f) && !/監造/.test(f)) starts.push(i); });
+      if (!starts.length) return;
+      starts.forEach(function (st, k) { var d = driBlock(s.rows.slice(st, starts[k + 1] || s.rows.length), c, log, '「' + s.sn + '」第 ' + (st + 1) + ' 列'); if (d && d.date) days.push(d); });
+    });
+    return days;
+  }
+  $('driGo').addEventListener('click', function () {
+    var c = driSaveCfg(), log = [], all = [];
+    $('driGo').disabled = true; $('driGo').textContent = '解析中…';
+    (window.XLSX ? Promise.resolve() : loadScript(CDN.xlsx)).then(function () {
+      return driFiles.reduce(function (pr, f) {
+        return pr.then(function () { return f.arrayBuffer(); }).then(function (buf) {
+          var wb = window.XLSX.read(buf, { type: 'array', cellDates: true });
+          all = all.concat(driParseBook(wb, f.name, c, log));
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      var by = {}; all.forEach(function (d) { by[d.date] = d; });
+      var days = Object.keys(by).sort().map(function (k) { return by[k]; });
+      log.push('完成：共 ' + days.length + ' 天、' + days.reduce(function (s, d) { return s + d.items.length; }, 0) + ' 個施工項目。');
+      driResult = { days: days, log: log, sel: {} }; days.forEach(function (d) { driResult.sel[d.date] = true; });
+    }).catch(function (e) { log.push('✕ 解析失敗：' + (e && e.message || e)); driResult = { days: [], log: log, sel: {} }; })
+      .then(function () { $('driGo').disabled = false; $('driGo').textContent = '開始解析'; driPaint(); });
+  });
+  function driPaint() {
+    var R = driResult, p = proj(cur.pid);
+    $('driPv').innerHTML = !R ? '<p class="muted">尚未解析任何資料。</p>' : !R.days.length ? '<p class="muted">沒有解析出任何日期。請檢查解析紀錄，或調整關鍵字後再試。</p>' :
+      '<div class="dri-tbl"><table><thead><tr><th><input type="checkbox" id="driAll" checked aria-label="全選"></th><th>日期</th><th>天氣</th><th>預定／實際</th><th>施工項目（本日／累計）</th><th>狀態</th></tr></thead><tbody>' +
+      R.days.map(function (d) {
+        var has = !!dailyOf(p, d.date);
+        return '<tr><td><input type="checkbox" data-dsel="' + d.date + '"' + (R.sel[d.date] ? ' checked' : '') + '></td><td class="nw">' + d.date.slice(5).replace('-', '/') + '</td><td class="nw">' + esc([d.wAm, d.wPm].join('/')) + '</td><td class="nw">' + pct(d.plan) + '／' + pct(d.act) + '</td>' +
+          '<td>' + (d.items.length ? d.items.map(function (it) { return esc(it.name) + ' <span class="muted">' + esc(it.qty + it.unit) + (it.cum ? '／' + esc(it.cum + it.unit) : '') + '</span>'; }).join('<br>') : '<span class="muted">無</span>') + '</td>' +
+          '<td class="nw">' + (has ? ($('driDup').value === 'over' ? '將覆蓋' : '已有，略過') : '新增') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    $('driWrite').disabled = !(R && R.days.some(function (d) { return R.sel[d.date]; }));
+    $('driLog').textContent = R ? R.log.join('\n') : '';
+  }
+  $('driPv').addEventListener('change', function (e) {
+    if (!driResult) return;
+    if (e.target.id === 'driAll') driResult.days.forEach(function (d) { driResult.sel[d.date] = e.target.checked; });
+    else if (e.target.dataset.dsel) driResult.sel[e.target.dataset.dsel] = e.target.checked;
+    driPaint();
+  });
+  $('driWrite').addEventListener('click', function () {
+    var p = proj(cur.pid), over = $('driDup').value === 'over', n = 0, skip = 0;
+    driResult.days.forEach(function (d) {
+      if (!driResult.sel[d.date]) return;
+      var ex = dailyOf(p, d.date); if (ex && !over) { skip++; return; }
+      var t = dailyMake(p, d.date);
+      t.wAm = d.wAm; t.wPm = d.wPm; t.plan = d.plan === '' ? '' : String(Math.round(d.plan * 10000) / 10000); t.act = d.act === '' ? '' : String(Math.round(d.act * 10000) / 10000);
+      t.items = d.items.map(function (it) { return { name: it.name, qty: it.qty, unit: it.unit, cum: it.cum }; }); t.src = '施工日誌匯入'; n++;
+    });
+    save(); driResult.log.push('已寫入 ' + n + ' 天' + (skip ? '，略過 ' + skip + ' 天（已有日報）' : '') + '。'); driPaint();
+    $('driMsg').textContent = '已寫入 ' + n + ' 天的日報。';
+  });
 
   /* ========== 抽查總表：截至某日的材料進場抽驗、分項施工抽查、缺失改善追蹤（格式依月進度會議報告） ========== */
   var sumOut = {};
