@@ -298,10 +298,10 @@
   }
 
   /* 公文 PDF 歸檔到雲端硬碟「監造公文／工程名稱／收文或發文」（需要新版 Apps Script） */
-  function putDoc(o) { return call('putDoc', o); }
+  function putDoc(o) { var m = {}; Object.keys(o).forEach(function (k) { if (k !== 'data') m[k] = o[k]; }); return call('putDoc', 'data:' + (o.mime || 'application/pdf') + ';base64,' + o.data, m); }
   function ocrDoc(id) { return call('ocrDoc', id); }
   /* 收文辨識：傳 JPEG（base64）給 Google OCR；改名：確認欄位後依規則重新命名 */
-  function ocrImg(o) { return call('ocrImg', o); }
+  function ocrImg(o) { return call('ocrImg', 'data:image/jpeg;base64,' + o.data); }
   function renameDoc(o) { return call('renameDoc', o); }
   window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },

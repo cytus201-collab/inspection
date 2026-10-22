@@ -174,12 +174,23 @@ function sub_(folder, name) {
   var it = folder.getFoldersByName(name);
   return it.hasNext() ? it.next() : folder.createFolder(name);
 }
-/* o: { proj: 工程名稱, dir: '收文' | '發文', name: 檔名, data: base64, mime, old: 舊檔 id（重新歸檔時移到垃圾桶） } */
-function putDoc(o) {
+/* 還原 base64（容許 data: 開頭、空白換行、缺少補位、網址安全字元）；失敗時回報長度與開頭供除錯 */
+function b64_(x) {
+  var s = String(x == null ? '' : x), i = s.indexOf('base64,');
+  if (i >= 0) s = s.slice(i + 7);
+  s = s.replace(/[^A-Za-z0-9+\/=_-]/g, '').replace(/=+$/, '');
+  if (/[-_]/.test(s)) s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  try { return Utilities.base64Decode(s); }
+  catch (e) { throw new Error('檔案資料無法還原（長度 ' + s.length + '，開頭「' + String(x).slice(0, 30) + '」）'); }
+}
+/* putDoc(o) 或 putDoc(data, meta)：o / meta = { proj: 工程名稱, dir: '收文' | '發文', name: 檔名, mime, old: 舊檔 id（重新歸檔時移到垃圾桶） }；data 可為 data URL */
+function putDoc(o, meta) {
+  if (typeof o === 'string') { meta = meta || {}; meta.data = o; o = meta; }
   var proj = String(o.proj || '未命名工程').replace(/[\\/:*?"<>|]/g, '_').slice(0, 80);
   var folder = sub_(sub_(docRoot_(), proj), o.dir === '收文' ? '收文' : '發文');
   if (o.old) { try { DriveApp.getFileById(o.old).setTrashed(true); } catch (e) {} }
-  var f = folder.createFile(Utilities.newBlob(Utilities.base64Decode(o.data), o.mime || 'application/pdf', o.name || '公文.pdf'));
+  var f = folder.createFile(Utilities.newBlob(b64_(o.data), o.mime || 'application/pdf', o.name || '公文.pdf'));
   return { id: f.getId(), url: f.getUrl() };
 }
 function getDoc(id) {
@@ -198,7 +209,8 @@ function ocrDoc(id) {
 
 /* 收文辨識：網頁把掃描公文的前幾頁轉成 JPEG 傳來（避開雲端 OCR 2MB 限制），暫存後辨識，再刪除暫存檔 */
 function ocrImg(o) {
-  var tmp = docRoot_().createFile(Utilities.newBlob(Utilities.base64Decode(o.data), o.mime || 'image/jpeg', 'ocr-src.jpg'));
+  var data = typeof o === 'string' ? o : o.data;
+  var tmp = docRoot_().createFile(Utilities.newBlob(b64_(data), 'image/jpeg', 'ocr-src.jpg'));
   try { return ocrDoc(tmp.getId()); } finally { try { tmp.setTrashed(true); } catch (e) {} }
 }
 function renameDoc(o) {
