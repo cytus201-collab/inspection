@@ -2068,7 +2068,11 @@
     if (d.short) return d.short;
     var t = d.kind === 'meet' ? (d.meet.reason || '') : (d.subj || '');
     t = t.replace(/[「『][^」』]*[」』]/g, '').replace(/^(有關|關於|檢陳|為)\s*/, '').replace(/^[案之的，、\s]+/, '');
-    t = t.split(/[，,。；]/)[0].replace(/乙案$|一案$|案$/, '').trim();
+    t = t.replace(/^.{0,24}?(有限公司|公司|分署|政府|事務所|工程處|處)(?=檢送|函送|函復|檢陳|有關|關於|，)/, '').replace(/^[，、\s]+/, '');
+    var seg = t.split(/[，,。；]/).map(function (x) { return x.trim(); }).filter(Boolean);
+    t = seg[0] || '';
+    if (/^(檢送|函送|檢陳|有關|關於)?$/.test(t) && seg[1]) t = (t === '檢送' || t === '函送' || t === '檢陳' ? t : '') + seg[1];
+    t = t.replace(/乙案$|一案$|案$/, '').trim();
     return t.slice(0, 30) || (d.kind === 'meet' ? '開會通知' : '函');
   }
   function docFileName(d) { var a = (d.date || '').split('-'); return (a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : '') + '_' + d.no + '_' + shortSubj(d); }
