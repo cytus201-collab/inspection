@@ -1769,7 +1769,7 @@
         if (!(window.Cloud && window.Cloud.ocrImg)) { d.ocr = 'none'; return; }
         step('辨識中');
         return imgs.reduce(function (pr, im) { return pr.then(function () { return window.Cloud.ocrImg({ data: im, mime: 'image/jpeg' }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve())
-          .then(function () { d.ocr = 'ok'; }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 200); });
+          .then(function () { d.ocr = 'ok'; }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); });
       })
       .then(function () {
         if (text) { d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); }

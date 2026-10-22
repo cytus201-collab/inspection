@@ -197,21 +197,33 @@ function getDoc(id) {
   var f = DriveApp.getFileById(id);
   return 'data:' + f.getMimeType() + ';base64,' + Utilities.base64Encode(f.getBlob().getBytes());
 }
-/* 掃描公文文字辨識：需在編輯器「服務」加入 Drive API。以 Google 文件 OCR 轉出文字後刪除暫存檔 */
-function ocrDoc(id) {
-  var res, docId;
-  try { res = Drive.Files.copy({ name: 'ocr-tmp', mimeType: 'application/vnd.google-apps.document' }, id, { ocrLanguage: 'zh-TW' }); docId = res.id; }
-  catch (e) { res = Drive.Files.copy({ title: 'ocr-tmp', mimeType: 'application/vnd.google-apps.document' }, id, { ocr: true, ocrLanguage: 'zh-TW' }); docId = res.id; }
-  var text = DocumentApp.openById(docId).getBody().getText();
-  try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {}
-  return text;
+/* 掃描公文文字辨識：需在編輯器「服務」加入 Drive API。轉成 Google 文件（OCR）取出文字後刪除暫存檔。
+   語言代碼依序嘗試 zh-TW、zh、不指定（Drive API v3 對代碼格式較嚴格），v2 服務則用 ocr:true */
+var OCR_LANGS = ['zh-TW', 'zh', ''];
+function ocrText_(docId) {
+  try { return DocumentApp.openById(docId).getBody().getText(); }
+  finally { try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {} }
 }
+function ocrTry_(fns) {
+  var errs = [];
+  for (var i = 0; i < fns.length; i++) {
+    try { var r = fns[i](); if (r && r.id) return ocrText_(r.id); }
+    catch (e) { var m = String(e && e.message || e).slice(0, 160); if (errs.indexOf(m) < 0) errs.push(m); }
+  }
+  throw new Error(errs.join('／') || '辨識失敗');
+}
+function ocrBlob_(blob) {
+  var G = 'application/vnd.google-apps.document', fns = [];
+  OCR_LANGS.forEach(function (lg) { fns.push(function () { return Drive.Files.create({ name: 'ocr-tmp', mimeType: G }, blob, lg ? { ocrLanguage: lg } : {}); }); });
+  OCR_LANGS.forEach(function (lg) { fns.push(function () { return Drive.Files.insert({ title: 'ocr-tmp', mimeType: G }, blob, lg ? { ocr: true, ocrLanguage: lg } : { ocr: true }); }); });
+  return ocrTry_(fns);
+}
+function ocrDoc(id) { return ocrBlob_(DriveApp.getFileById(id).getBlob()); }
 
 /* 收文辨識：網頁把掃描公文的前幾頁轉成 JPEG 傳來（避開雲端 OCR 2MB 限制），暫存後辨識，再刪除暫存檔 */
 function ocrImg(o) {
   var data = typeof o === 'string' ? o : o.data;
-  var tmp = docRoot_().createFile(Utilities.newBlob(b64_(data), 'image/jpeg', 'ocr-src.jpg'));
-  try { return ocrDoc(tmp.getId()); } finally { try { tmp.setTrashed(true); } catch (e) {} }
+  return ocrBlob_(Utilities.newBlob(b64_(data), 'image/jpeg', 'ocr-src.jpg'));
 }
 function renameDoc(o) {
   var f = DriveApp.getFileById(o.id); f.setName(String(o.name || f.getName()).slice(0, 200));
