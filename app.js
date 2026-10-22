@@ -223,7 +223,7 @@
   }
   window.addEventListener('popstate', function (e) { cur = e.state || { v: 'projects' }; render(); });
   $('navBack').addEventListener('click', function () { history.back(); });
-  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit', 'vField', 'vDrImport', 'vWorks'];
+  var VIEWS = ['vProjects', 'vProject', 'vWork', 'vForm', 'vMaterials', 'vMatItem', 'vMatImport', 'vPreview', 'vDwgs', 'vDwg', 'vStd', 'vDocs', 'vDocEdit', 'vDaily', 'vDailyEdit', 'vField', 'vDrImport', 'vWorks', 'vInEdit'];
   function show(id) { VIEWS.forEach(function (v) { $(v).hidden = v !== id; }); window.scrollTo(0, 0); }
   function topbar(title, sub, back, right) {
     $('tbTitle').textContent = title; $('tbSub').textContent = sub || '';
@@ -267,7 +267,7 @@
     else if (cur.v === 'matItem' && !matById(p, cur.mid)) cur = { v: 'materials', pid: cur.pid };
     else if (cur.v === 'matImport' && !pendingImport) cur = { v: 'materials', pid: cur.pid };
     else if (/^(dwg|dwgPrint)$/.test(cur.v) && !dwgById(p, cur.did)) cur = { v: 'dwgs', pid: cur.pid };
-    else if (/^(docEdit|docPrint)$/.test(cur.v) && !docById(p, cur.did)) cur = { v: 'docs', pid: cur.pid };
+    else if (/^(docEdit|docPrint|inEdit)$/.test(cur.v) && !docById(p, cur.did)) cur = { v: 'docs', pid: cur.pid };
     $('sumBar').hidden = true;
     /* 公文列印需要零邊界（Safari 不支援具名頁面，所以只在公文預覽時加上全域 @page） */
     if ($('gwFontBar') && !/^(docPrint|dailyPrint)$/.test(cur.v)) $('gwFontBar').hidden = true;
@@ -276,7 +276,7 @@
     ({
       projects: renderProjects, project: renderProject, work: renderWork, form: renderForm, preview: renderPreview,
       materials: renderMaterials, matItem: renderMatItem, matImport: renderMatImport, matPrint: renderMatPrint, sumPrint: renderSumPrint,
-      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint, field: renderField, works: renderWorks, drImport: renderDrImport
+      dwgs: renderDwgs, dwg: renderDwg, dwgPrint: renderDwgPrint, std: renderStd, docs: renderDocs, docEdit: renderDocEdit, docPrint: renderDocPrint, daily: renderDaily, dailyEdit: renderDailyEdit, dailyPrint: renderDailyPrint, field: renderField, works: renderWorks, drImport: renderDrImport, inEdit: renderInEdit
     })[cur.v]();
     coEdit(); markNav();
     if (window.Cloud && window.Cloud.viewChanged) window.Cloud.viewChanged();
@@ -345,7 +345,7 @@
   }
   ['rail', 'tabs'].forEach(function (id) { $(id).addEventListener('click', function (e) { var b = e.target.closest('[data-nav]'); if (b) navTo(b.dataset.nav); }); });
   function markNav() {
-    var v = cur.v, k = v === 'projects' ? 'office' : v === 'field' ? 'field' : /^doc/.test(v) ? 'docs' : /^(daily|drImport)/.test(v) ? 'daily' : /^mat/.test(v) ? 'materials' : /^(works|work|form|preview|std|dwgs|dwg)/.test(v) ? 'works' : 'project';
+    var v = cur.v, k = v === 'projects' ? 'office' : v === 'field' ? 'field' : /^(doc|inEdit)/.test(v) ? 'docs' : /^(daily|drImport)/.test(v) ? 'daily' : /^mat/.test(v) ? 'materials' : /^(works|work|form|preview|std|dwgs|dwg)/.test(v) ? 'works' : 'project';
     document.querySelectorAll('#rail [data-nav], #tabs [data-nav]').forEach(function (b) { b.classList.toggle('on', b.dataset.nav === k); });
     if (cur.pid) lsSet('last-pid', cur.pid);
   }
@@ -387,7 +387,10 @@
       /* 近 7 天：本工程的會議、發文、缺失期限、預定抽查 */
       var due = [], end = addDays(td, 7);
       (p.docs || []).forEach(function (d) {
-        if (d.kind === 'meet' && d.meet && d.meet.time && d.meet.time.slice(0, 10) >= td && d.meet.time.slice(0, 10) <= end) due.push({ dt: d.meet.time.slice(0, 10), k: 'doc', t: '會議：' + shortSubj(d) + ' ' + d.meet.time.slice(11, 16), s: d.meet.place || '', go: { v: 'docEdit', pid: p.id, did: d.id } });
+        var dv = d.dir === 'in' ? 'inEdit' : 'docEdit';
+        if (d.dir === 'in' && d.due && d.st !== 'done' && d.st !== 'file' && d.due <= end) due.push({ dt: d.due, k: 'doc', t: '收文期限：' + shortSubj(d), s: [d.org, d.no].filter(Boolean).join('・'), late: d.due < td, go: { v: dv, pid: p.id, did: d.id } });
+        if (d.kind === 'meet' && d.meet && d.meet.time && d.meet.time.slice(0, 10) >= td && d.meet.time.slice(0, 10) <= end) due.push({ dt: d.meet.time.slice(0, 10), k: 'doc', t: '會議：' + shortSubj(d) + ' ' + d.meet.time.slice(11, 16), s: d.meet.place || '', go: { v: dv, pid: p.id, did: d.id } });
+        else if (d.dir === 'in') return;
         else if (d.date >= td && d.date <= end) due.push({ dt: d.date, k: 'doc', t: '發文：' + shortSubj(d), s: d.no || '', go: { v: 'docEdit', pid: p.id, did: d.id } });
       });
       defs.forEach(function (x) { var dl = defInfo(x, td).dl; if (dl && dl <= end) due.push({ dt: dl, k: 'ng', t: '缺失改善期限：' + x.name, s: x.loc || '', late: dl < td, go: x.r && x.w ? { v: 'form', pid: p.id, wid: x.w.id, rid: x.r.id } : { v: 'project', pid: p.id } }); });
@@ -456,7 +459,7 @@
     if (ds.fq === 'mat') return go({ v: 'materials', pid: p.id });
     if (ds.fq === 'plan') { calSel = today(); var d0 = new Date(); calY = d0.getFullYear(); calM = d0.getMonth(); go({ v: 'project', pid: p.id }); setTimeout(function () { var pa = document.querySelector('#calDay .plan-add'); if (pa) { pa.open = true; pa.scrollIntoView({ block: 'center' }); } }, 40); return; }
     if (ds.openrec) { var a2 = ds.openrec.split('|'); return go({ v: 'form', pid: p.id, wid: a2[0], rid: a2[1] }); }
-    if (ds.opendoc) return go({ v: 'docEdit', pid: p.id, did: ds.opendoc });
+    if (ds.opendoc) return go({ v: docView(p, ds.opendoc), pid: p.id, did: ds.opendoc });
     if (ds.opendr) return go({ v: 'dailyEdit', pid: p.id, date: ds.opendr });
     if (ds.openmat) return go({ v: 'matItem', pid: p.id, mid: ds.openmat });
   });
@@ -1646,7 +1649,11 @@
     $('coName').value = co.name || ''; $('coAddr').value = co.addr || ''; $('coHead').value = co.head || '';
     $('coSealImg').hidden = !co.seal; if (co.seal) { $('coSealImg').setAttribute('data-img', co.seal); fillImgs($('coSealBox')); }
     if (!cfg.caseNo) $('dcSetBox').open = true;
-    var list = (p.docs || []).slice().sort(function (a, b) { return (b.date || '') < (a.date || '') ? -1 : 1; });
+    var list = (p.docs || []).filter(function (d) { return d.dir !== 'in'; }).sort(function (a, b) { return (b.date || '') < (a.date || '') ? -1 : 1; });
+    var tab = cur.tab === 'in' ? 'in' : 'out';
+    document.querySelectorAll('#docTab [data-dt]').forEach(function (b) { b.classList.toggle('on', b.dataset.dt === tab); });
+    $('docOutBox').hidden = tab !== 'out'; document.querySelectorAll('#vDocs .out-only').forEach(function (el) { el.hidden = tab !== 'out'; });
+    $('docInBox').hidden = tab !== 'in'; renderInList(p);
     $('docList').innerHTML = list.length ? list.map(function (d) {
       var t = d.kind === 'meet' ? '開會通知單：' + (d.meet && d.meet.reason || '') : d.subj || '';
       return '<button type="button" class="doc-row" data-doc="' + d.id + '"><span class="doc-d">' + roc(d.date, '.') + '</span><span class="doc-t"><b>' + esc(t || '（未填主旨）') + '</b><small>' + esc(d.no) + (d.to ? ' · ' + esc(d.to) : '') + '</small></span>' +
@@ -1654,6 +1661,7 @@
     }).join('') : '<div class="empty">尚無發文。按上方「＋ 函」或「＋ 開會通知單」開始。</div>';
     show('vDocs');
   }
+  $('docTab').addEventListener('click', function (e) { var b = e.target.closest('[data-dt]'); if (b) go({ v: 'docs', pid: cur.pid, tab: b.dataset.dt }, true); });
   function cfgField(id, fn) { $(id).addEventListener('change', function () { var p = proj(cur.pid); fn(docCfg(p), $(id).value, p); save(); renderDocs(); }); }
   cfgField('dcCase', function (c, v) { c.caseNo = v.trim(); });
   cfgField('dcPrefix', function (c, v) { c.prefix = v.trim(); });
@@ -1668,6 +1676,247 @@
     rd.onload = function () { var id = 'seal-' + uid(), data = rd.result; IDB.put(id, data).then(function () { thumbCache[id] = data; company().seal = id; save(); if (window.Cloud) window.Cloud.uploadPhoto(id, data); renderDocs(); }); };
     rd.readAsDataURL(f); $('coSealPick').value = '';
   });
+  /* ========== 收文：上傳掃描公文 → 辨識（PDF 文字層或 Google OCR）→ 確認欄位 → 歸檔雲端 ========== */
+  function docView(p, id) { var d = docById(p, id); return d && d.dir === 'in' ? 'inEdit' : 'docEdit'; }
+  var IN_ST = { check: '待確認', todo: '待辦', done: '已回覆', file: '存查' };
+  var inFilter = 'all', inBusy = {};
+  function inSrcOf(org) { return /營造|有限公司|股份|工程行|企業社|實業|工程顧問/.test(org || '') ? 'ctr' : 'gov'; }
+  function inFileName(d) {
+    var a = (d.date || '').split('-');
+    return [(a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : ''), d.no || '', shortSubj(d), d.org || ''].join('_').replace(/[\\/:*?"<>|]/g, '_');
+  }
+  function renderInList(p) {
+    var cloud = !!(window.Cloud && window.Cloud.putDoc);
+    $('inHint').textContent = cloud ? '上傳掃描的 PDF 或照片，系統會自動辨識來文單位、日期、字號、主旨與說明，確認後歸檔到雲端「監造公文／' + (p.info.name || '工程') + '／收文」。'
+      : '個人版沒有雲端辨識：電子公文（PDF 內含文字）可自動讀取；掃描檔請手動填寫欄位。共編版可使用 Google 辨識並歸檔到雲端。';
+    var all = (p.docs || []).filter(function (d) { return d.dir === 'in'; }).sort(function (a, b) { return (b.date || '9') < (a.date || '9') ? -1 : 1; });
+    var F = [['all', '全部'], ['gov', '機關'], ['ctr', '營造廠'], ['open', '未結案']];
+    $('inF').innerHTML = F.map(function (f) { return '<button type="button" class="cf' + (inFilter === f[0] ? ' on' : '') + '" data-inf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+    var list = all.filter(function (d) { return inFilter === 'all' || (inFilter === 'open' ? d.st === 'check' || d.st === 'todo' : d.src === inFilter); });
+    $('inList').innerHTML = list.length ? list.map(function (d) {
+      var busy = inBusy[d.id], late = d.due && d.due < today() && (d.st === 'todo' || d.st === 'check');
+      return '<button type="button" class="doc-row" data-indoc="' + d.id + '"><span class="doc-d">' + (d.date ? roc(d.date, '.') : '—') + '</span><span class="doc-t"><b>' + esc(d.kind === 'meet' ? '開會通知：' + (d.meet && d.meet.reason || d.subj || '') : d.subj || (busy ? '辨識中…' : '（未填主旨）')) + '</b><small>' +
+        '<span class="chip-k">' + (d.src === 'ctr' ? '營造廠' : '機關') + '</span> ' + esc([d.org, d.no].filter(Boolean).join(' · ')) + (d.due ? ' · 期限 ' + roc(d.due, '.') : '') + '</small></span>' +
+        '<span class="chip-k' + (d.st === 'check' || late ? ' dark' : '') + '">' + (busy ? busy : late ? '已逾期' : IN_ST[d.st] || '待確認') + '</span>' + (d.fileId ? '<span class="doc-ok" title="已歸檔到雲端">已歸檔</span>' : '') + '<span class="chev">›</span></button>';
+    }).join('') : '<div class="empty">' + (all.length ? '沒有符合篩選的收文。' : '尚無收文。按上方「上傳收文」加入掃描檔或照片。') + '</div>';
+  }
+  $('inF').addEventListener('click', function (e) { var b = e.target.closest('[data-inf]'); if (b) { inFilter = b.dataset.inf; renderInList(proj(cur.pid)); } });
+  $('inList').addEventListener('click', function (e) { var b = e.target.closest('[data-indoc]'); if (b) go({ v: 'inEdit', pid: cur.pid, did: b.dataset.indoc }); });
+  $('inFile').addEventListener('change', function () {
+    var files = [].slice.call($('inFile').files), p = proj(cur.pid); $('inFile').value = ''; if (!files.length) return;
+    var docs = files.map(function (f) {
+      var d = { id: uid(), dir: 'in', kind: 'letter', src: 'gov', org: '', date: '', no: '', speed: '', att: '', subj: '', desc: '', short: '', due: '', st: 'check', note: '', fname: f.name, created: Date.now() };
+      (p.docs = p.docs || []).push(d); inBusy[d.id] = '排隊中'; return d;
+    });
+    save(); renderInList(p);
+    docs.reduce(function (pr, d, i) { return pr.then(function () { return inProcess(p, d, files[i]); }); }, Promise.resolve()).then(function () {
+      $('inMsg').textContent = docs.length + ' 份收文已加入，請逐份點開確認欄位。';
+      if (docs.length === 1 && cur.v === 'docs') go({ v: 'inEdit', pid: p.id, did: docs[0].id });
+    });
+  });
+  function readAs(f, how) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r[how](f); }); }
+  function loadPdf(buf) {
+    return (window.pdfjsLib ? Promise.resolve() : loadScript(CDN.pdf)).then(function () {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfWorker;
+      return pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), cMapUrl: CDN.pdfCmaps, cMapPacked: true }).promise;
+    });
+  }
+  /* PDF 文字層（電子公文）：依座標排成行 */
+  function pdfText(pdf, n) {
+    var jobs = [];
+    for (var i = 1; i <= Math.min(n, pdf.numPages); i++) jobs.push(pdf.getPage(i).then(function (pg) {
+      return pg.getTextContent().then(function (tc) {
+        var rows = [];
+        tc.items.forEach(function (it) { if (!it.str.trim()) return; var y = Math.round(it.transform[5]), r = rows.filter(function (x) { return Math.abs(x.y - y) < 4; })[0]; if (!r) rows.push(r = { y: y, xs: [] }); r.xs.push({ x: it.transform[4], s: it.str }); });
+        rows.sort(function (a, b) { return b.y - a.y; });
+        return rows.map(function (r) { return r.xs.sort(function (a, b) { return a.x - b.x; }).map(function (x) { return x.s; }).join(''); }).join('\n');
+      });
+    }));
+    return Promise.all(jobs).then(function (t) { return t.join('\n'); });
+  }
+  function canvasJpeg(cv) { return cv.toDataURL('image/jpeg', 0.85).split(',')[1]; }
+  function pdfImages(pdf, n) {
+    var out = [], chain = Promise.resolve();
+    for (var i = 1; i <= Math.min(n, pdf.numPages); i++) (function (k) {
+      chain = chain.then(function () { return pdf.getPage(k); }).then(function (pg) {
+        var v1 = pg.getViewport({ scale: 1 }), sc = Math.min(2.6, 1800 / v1.width), vp = pg.getViewport({ scale: sc });
+        var cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+        var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+        return pg.render({ canvasContext: cx, viewport: vp }).promise.then(function () { out.push(canvasJpeg(cv)); });
+      });
+    })(i);
+    return chain.then(function () { return out; });
+  }
+  function imgJpeg(dataUrl) {
+    return new Promise(function (res, rej) {
+      var im = new Image(); im.onload = function () { var sc = Math.min(1, 2000 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc); var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height); res(canvasJpeg(cv)); };
+      im.onerror = function () { rej(new Error('無法讀取圖片')); }; im.src = dataUrl;
+    });
+  }
+  function cloudErr(e) { return /apply|not found|找不到|Script function|is not a function|Drive is not defined|Drive API/i.test(e && e.message || '') ? 'need' : (e && e.message || String(e)); }
+  /* 辨識一份收文：先找 PDF 文字層，沒有再送 Google OCR（前 2 頁，公文本文通常在此） */
+  function inProcess(p, d, f) {
+    var isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, buf, text = '', imgs = [];
+    var step = function (t) { inBusy[d.id] = t; if (cur.v === 'docs') renderInList(p); if (cur.v === 'inEdit' && cur.did === d.id) renderInEdit(); };
+    step('讀取中');
+    return readAs(f, 'readAsDataURL').then(function (u) { url = u; d.mime = f.type || (isPdf ? 'application/pdf' : 'image/jpeg'); return IDB.put('docf-' + d.id, url).catch(function () {}); })
+      .then(function () { return isPdf ? readAs(f, 'readAsArrayBuffer').then(function (b) { buf = b; return loadPdf(b); }).then(function (pdf) {
+        d.pages = pdf.numPages;
+        return pdfText(pdf, 2).then(function (t) { if (t.replace(/\s/g, '').length > 60) { text = t; d.ocr = 'text'; return; } return pdfImages(pdf, 2).then(function (xs) { imgs = xs; }); });
+      }) : imgJpeg(url).then(function (x) { imgs = [x]; d.pages = 1; }); })
+      .then(function () {
+        if (text || !imgs.length) return;
+        if (!(window.Cloud && window.Cloud.ocrImg)) { d.ocr = 'none'; return; }
+        step('辨識中');
+        return imgs.reduce(function (pr, im) { return pr.then(function () { return window.Cloud.ocrImg({ data: im, mime: 'image/jpeg' }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve())
+          .then(function () { d.ocr = 'ok'; }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 200); });
+      })
+      .then(function () {
+        if (text) { d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); }
+        save(); return inArchive(p, d, url);
+      })
+      .catch(function (e) { d.ocr = 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 200); save(); })
+      .then(function () { delete inBusy[d.id]; step(null); delete inBusy[d.id]; if (cur.v === 'docs') renderInList(p); if (cur.v === 'inEdit' && cur.did === d.id) renderInEdit(); });
+  }
+  function inArchive(p, d, url) {
+    if (!(window.Cloud && window.Cloud.putDoc) || !url) return Promise.resolve();
+    var name = inFileName(d) + (/pdf/.test(d.mime) ? '.pdf' : '.jpg');
+    return window.Cloud.putDoc({ proj: p.info.name, dir: '收文', name: name, data: String(url).split(',')[1], mime: d.mime, old: d.fileId || '' })
+      .then(function (r) { d.fileId = r.id; d.fileUrl = r.url; d.fname = name; save(); }, function (e) { d.archErr = cloudErr(e); save(); });
+  }
+  /* 欄位確認後檔名改變：雲端改名（舊版 Apps Script 沒有改名功能時重新上傳） */
+  function inRename(p, d) {
+    if (!d.fileId || !window.Cloud) return;
+    var name = inFileName(d) + (/pdf/.test(d.mime || 'pdf') ? '.pdf' : '.jpg'); if (name === d.fname) return;
+    var redo = function () { return IDB.get('docf-' + d.id).then(function (u) { if (u) return inArchive(p, d, u); }); };
+    (window.Cloud.renameDoc ? window.Cloud.renameDoc({ id: d.fileId, name: name }).then(function (r) { d.fname = name; if (r && r.url) d.fileUrl = r.url; save(); }, redo) : redo());
+  }
+  function inApply(d, o, force) {
+    ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { if (o[k] && (force || !d[k])) d[k] = o[k]; });
+    if (o.kind === 'meet' || force) d.kind = o.kind || 'letter';
+    if (o.meet && (force || !d.meet || !d.meet.time)) d.meet = Object.assign({ reason: '', time: '', place: '' }, d.meet || {}, o.meet);
+    if (o.org && (force || !d.srcSet)) d.src = inSrcOf(d.org);
+    d.found = o.found;
+  }
+  /* 解析公文文字（依文書處理手冊格式：機關＋函、發文日期、發文字號、速別、附件、主旨、說明…） */
+  function inParse(t) {
+    var s = String(t || '').replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xfee0); }).replace(/\r/g, '').replace(/：/g, ':').replace(/[ \t　]+/g, ' ');
+    var L = s.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x && !/^第\s*\d+\s*頁/.test(x) && !/^[（(]?\s*共\s*\d+\s*頁/.test(x); });
+    var o = { kind: 'letter', found: {} }, j = function (x) { return x.replace(/\s+/g, ''); };
+    var ymd3 = function (y, m, dd) { y = +y; if (y < 1911) y += 1911; return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + dd).slice(-2); };
+    for (var i = 0; i < Math.min(L.length, 18); i++) {
+      var m = /^(.{2,40}?)\s*(書函|函|開會通知單|開會通知書|會勘通知單|會議通知單)$/.exec(L[i]);
+      if (m && !/受文者|主旨|說明|地址|電話/.test(m[1])) { o.org = j(m[1]).replace(/^(正本|副本)/, ''); if (/通知/.test(m[2])) o.kind = 'meet'; break; }
+    }
+    var all = L.join('\n'), mm;
+    if ((mm = /發文日期\s*:?\s*(?:中華民國)?\s*(\d{2,4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日/.exec(all))) o.date = ymd3(mm[1], mm[2], mm[3]);
+    if ((mm = /發文字號\s*:?\s*([^\s:]{1,16}?字第\s*[0-9A-Za-z\-]+\s*號)/.exec(all)) || (mm = /([一-龥]{1,10}字第\s*\d{6,}\s*號)/.exec(all))) o.no = j(mm[1]);
+    if ((mm = /速別\s*:?\s*(最速件|速件|普通件)/.exec(all))) o.speed = mm[1];
+    if ((mm = /附件\s*:?\s*([^\n]*)/.exec(all)) && !/^(主旨|說明)/.test(mm[1])) o.att = mm[1].trim();
+    var block = function (start, stop) {
+      var a = -1, out = [];
+      for (var k = 0; k < L.length; k++) { if (a < 0) { var mt = start.exec(j(L[k])); if (mt) { a = k; var rest = j(L[k]).slice(mt[0].length); if (rest) out.push(rest); } } else { if (stop.test(j(L[k]))) break; out.push(L[k]); } }
+      return a < 0 ? null : out;
+    };
+    var STOP = /^(說明|辦法|正本|副本|備註|出席者|列席者|開會事由|開會時間|開會地點|主持人|聯絡人|會勘時間|會勘地點)[:：]?/;
+    var sb = block(/^主旨:?/, STOP); if (sb) o.subj = j(sb.join(''));
+    var db = block(/^說明:?/, /^(辦法|正本|副本|備註)[:：]?/);
+    if (db) {
+      var items = [];
+      db.forEach(function (x) { var y = j(x); if (/^([一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]+[）)]|\d+[.、])/.test(y) || !items.length) items.push(y); else items[items.length - 1] += y; });
+      o.desc = items.join('\n');
+    }
+    if (o.kind === 'meet' || /開會事由|開會時間/.test(all)) {
+      var rs = block(/^開會事由:?/, STOP), tm = block(/^(開會|會勘)時間:?/, STOP), pl = block(/^(開會|會勘)地點:?/, STOP);
+      o.meet = { reason: rs ? j(rs.join('')) : '', time: '', place: pl ? j(pl.join('')) : '' };
+      if (tm && (mm = /(\d{2,4})年(\d{1,2})月(\d{1,2})日[^\d]{0,12}?(上午|下午|中午)?(\d{1,2})[時:](\d{1,2})?/.exec(j(tm.join(''))))) {
+        var h = +mm[5]; if (mm[4] === '下午' && h < 12) h += 12;
+        o.meet.time = ymd3(mm[1], mm[2], mm[3]) + 'T' + ('0' + h).slice(-2) + ':' + ('0' + (+mm[6] || 0)).slice(-2);
+      }
+      if (o.meet.reason || o.meet.time) { o.kind = 'meet'; if (!o.subj) o.subj = o.meet.reason; }
+    }
+    /* 處理期限：主旨或說明中「○年○月○日（前／以前）」 */
+    var body = j((o.subj || '') + '\n' + (o.desc || ''));
+    if ((mm = /(\d{2,3})年(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(mm[1], mm[2], mm[3]);
+    else if (o.date && (mm = /(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(o.date.slice(0, 4), mm[1], mm[2]);
+    ['org', 'date', 'no', 'subj', 'desc'].forEach(function (k) { o.found[k] = !!o[k]; });
+    return o;
+  }
+  function renderInEdit() {
+    var p = proj(cur.pid), d = docById(p, cur.did); if (!d) return;
+    topbar('收文', p.info.name || '未命名工程', '公文');
+    var busy = inBusy[d.id], f = d.found || {}, miss = function (k) { return d.ocr && d.ocr !== 'none' && !busy && !d[k] && f[k] === false ? ' miss' : ''; };
+    var inp = function (k, lab, type, ph) { return '<label class="f' + miss(k) + '"><span>' + lab + '</span><input data-inf2="' + k + '" type="' + (type || 'text') + '" value="' + esc(d[k] || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></label>'; };
+    var ta = function (k, lab, rows) { return '<label class="f' + miss(k) + '"><span>' + lab + '</span><textarea data-inf2="' + k + '" rows="' + rows + '">' + esc(d[k] || '') + '</textarea></label>'; };
+    var sel = function (k, lab, opts) { return '<label class="f"><span>' + lab + '</span><select data-inf2="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (d[k] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>'; };
+    var M = d.meet || {};
+    var ocrNote = busy ? '⏳ ' + busy + '…' : d.ocr === 'text' ? '已從 PDF 文字層讀取（電子公文，準確）。' : d.ocr === 'ok' ? '已由 Google 辨識自動帶入，黃色欄位沒有辨識到，請核對原件。' :
+      d.ocr === 'need' ? '雲端辨識尚未啟用：請依說明更新 Apps Script 並加入「Drive API」服務後重新部署，再按「重新辨識」。' : d.ocr === 'fail' ? '辨識失敗：' + esc(d.ocrErr || '') + '，可按「重新辨識」或手動填寫。' : '請對照原件填寫欄位（個人版無雲端辨識）。';
+    $('inEditBody').innerHTML =
+      '<div class="in-grid"><section class="card in-pv" id="inPv" aria-label="原件"><p class="muted">載入原件中…</p></section>' +
+      '<section class="card in-form"><p class="muted in-note">' + ocrNote + '</p>' +
+      '<div class="grid g2">' + sel('src', '來文類別', [['gov', '機關'], ['ctr', '營造廠']]) + sel('kind', '公文類型', [['letter', '函'], ['meet', '開會／會勘通知單']]) + '</div>' +
+      inp('org', '來文單位') + '<div class="grid g2">' + inp('date', '發文日期（收文日期）', 'date') + inp('no', '發文字號', 'text', '例：府都發字第11501740501號') + '</div>' +
+      '<div class="grid g2">' + inp('speed', '速別', 'text', '普通件') + inp('att', '附件') + '</div>' +
+      ta('subj', '主旨', 3) +
+      (d.kind === 'meet' ? '<div class="grid g2"><label class="f"><span>開會時間</span><input data-inm="time" type="datetime-local" value="' + esc(M.time || '') + '"></label><label class="f"><span>開會地點</span><input data-inm="place" value="' + esc(M.place || '') + '"></label></div>' : '') +
+      ta('desc', '說明', 7) +
+      inp('short', '簡易主旨（檔名用，可留空自動產生）', 'text', shortSubj(Object.assign({}, d, { short: '' }))) +
+      '<div class="grid g2">' + inp('due', '處理期限', 'date') + sel('st', '處理狀態', [['check', '待確認'], ['todo', '待辦'], ['done', '已回覆'], ['file', '存查']]) + '</div>' +
+      ta('note', '備註', 2) +
+      '<p class="muted">檔名：' + esc(inFileName(d)) + (d.fileId ? '　<span class="doc-ok">已歸檔</span>' : d.archErr === 'need' ? '　（雲端歸檔需要更新 Apps Script）' : '') + '</p>' +
+      '<div class="btn-row">' + (d.st === 'check' ? '<button type="button" class="btn primary" id="inOk">確認欄位</button>' : '') +
+      ((window.Cloud && window.Cloud.ocrImg) || d.raw ? '<button type="button" class="btn ghost sm" id="inRe">重新辨識</button>' : '') +
+      (d.fileUrl ? '<a class="btn ghost sm" href="' + esc(d.fileUrl) + '" target="_blank" rel="noopener">開啟雲端原檔</a>' : '') +
+      '<button type="button" class="btn ghost sm danger" id="inDel">刪除</button></div>' +
+      (d.raw ? '<details class="in-raw"><summary class="muted">辨識原文</summary><pre>' + esc(d.raw) + '</pre></details>' : '') +
+      '</section></div>';
+    show('vInEdit');
+    inPreview(d);
+  }
+  function inPreview(d) {
+    var box = $('inPv');
+    IDB.get('docf-' + d.id).then(function (u) {
+      if (!box.isConnected) return;
+      if (!u) { box.innerHTML = d.fileUrl ? '<p class="muted">這台裝置沒有原件暫存。</p><a class="btn ghost sm" href="' + esc(d.fileUrl) + '" target="_blank" rel="noopener">開啟雲端原檔</a>' : '<p class="muted">沒有原件。</p>'; return; }
+      if (!/^data:application\/pdf/.test(u)) { box.innerHTML = '<img src="' + u + '" alt="收文原件">'; return; }
+      var bin = atob(u.split(',')[1]), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      loadPdf(arr.buffer).then(function (pdf) {
+        box.innerHTML = ''; var n = Math.min(pdf.numPages, 8), chain = Promise.resolve();
+        for (var k = 1; k <= n; k++) (function (k) { chain = chain.then(function () { return pdf.getPage(k); }).then(function (pg) { var v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: 1400 / v1.width }), cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; box.appendChild(cv); return pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise; }); })(k);
+        if (pdf.numPages > n) chain.then(function () { box.insertAdjacentHTML('beforeend', '<p class="muted">共 ' + pdf.numPages + ' 頁，僅預覽前 ' + n + ' 頁。</p>'); });
+      }).catch(function () { box.innerHTML = '<p class="muted">無法預覽 PDF。</p>'; });
+    });
+  }
+  $('inEditBody').addEventListener('change', function (e) {
+    var t = e.target, p = proj(cur.pid), d = docById(p, cur.did); if (!d) return;
+    if (t.dataset.inf2) { var k = t.dataset.inf2; d[k] = t.value.trim(); if (k === 'src') d.srcSet = 1; if (k === 'org' && !d.srcSet) d.src = inSrcOf(d.org); if (k === 'kind' && d.kind === 'meet' && !d.meet) d.meet = { reason: d.subj, time: '', place: '' }; }
+    if (t.dataset.inm) { d.meet = d.meet || { reason: '', time: '', place: '' }; d.meet[t.dataset.inm] = t.value; }
+    save(); if (d.st !== 'check') inRename(p, d);
+    if (/^(kind|src|st|org|date|no|short|subj)$/.test(t.dataset.inf2 || '')) setTimeout(function () { if (cur.v === 'inEdit') renderInEdit(); }, 0);
+  });
+  $('inEditBody').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var p = proj(cur.pid), d = docById(p, cur.did); if (!d) return;
+    if (b.id === 'inOk') {
+      if (!d.date || !d.org) { $('inEditBody').querySelector('.in-note').textContent = '請至少填寫來文單位與發文日期。'; return; }
+      d.st = 'todo'; save(); inRename(p, d); renderInEdit();
+    }
+    if (b.id === 'inRe') {
+      if (window.Cloud && window.Cloud.ocrImg) {
+        IDB.get('docf-' + d.id).then(function (u) {
+          if (!u) { if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); } return; }
+          fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { var fl = new File([bl], d.fname || 'in', { type: d.mime || bl.type }); d.ocr = ''; var keep = d.fileId; return inProcessRe(p, d, fl, keep); });
+        });
+      } else if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); }
+    }
+    if (b.id === 'inDel') ask('刪除這份收文？', '會從本工程移除（雲端已歸檔的檔案不會刪除）。', '取消', '刪除', function () { p.docs = p.docs.filter(function (x) { return x.id !== d.id; }); IDB.del('docf-' + d.id).catch(function () {}); save(); go({ v: 'docs', pid: p.id, tab: 'in' }, true); });
+  });
+  /* 重新辨識：清空自動帶入的欄位後再跑一次（已歸檔則改用原檔 id 覆蓋） */
+  function inProcessRe(p, d, f) {
+    ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { d[k] = ''; }); d.meet = null; d.srcSet = 0;
+    return inProcess(p, d, f);
+  }
   function newDoc(kind) {
     var p = proj(cur.pid), cfg = docCfg(p);
     if (!cfg.caseNo) { ask('請先設定案件編號', '發文字號會由「字號前綴＋民國年＋案件編號＋5 碼流水號」組成，請在「發文設定」填寫本工程的案件編號（例如 197）。', '好', '', function () {}); $('dcSetBox').open = true; return; }
@@ -2051,7 +2300,8 @@
       if (!matDone[m.id] && m.inspDate === date && m.inspResult) o.s3.push((m.name || '材料') + '進場抽查：' + (m.inspResult === 'ok' ? '合格' : '不合格'));
     });
     (p.docs || []).forEach(function (d) {
-      if (d.date === date) o.s5.push(d.no + ' ' + shortSubj(d));
+      if (d.dir === 'in') { if (d.date === date) o.s5.push('收' + (d.org || '') + ' ' + (d.no || '') + '函：' + shortSubj(d)); }
+      else if (d.date === date) o.s5.push(d.no + ' ' + shortSubj(d));
       if (d.kind === 'meet' && d.meet && (d.meet.time || '').slice(0, 10) === date) o.s5.push(d.meet.time.slice(11, 16) + ' ' + shortSubj(d));
     });
     return o;
@@ -2790,6 +3040,12 @@
       });
     });
     (p.docs || []).forEach(function (d) {
+      if (d.dir === 'in') {
+        if (d.date) ev.push({ date: d.date, kind: 'in', label: '收文：' + (d.org ? d.org + ' ' : '') + shortSubj(d), sub: d.no || '', did: d.id });
+        if (d.due && d.st !== 'done' && d.st !== 'file') ev.push({ date: d.due, kind: 'in', label: '收文期限：' + shortSubj(d), sub: d.org || '', did: d.id, overdue: d.due < today() });
+        if (d.kind === 'meet' && d.meet && d.meet.time) ev.push({ date: d.meet.time.slice(0, 10), kind: 'meet', label: '會議：' + shortSubj(d), sub: [d.meet.time.slice(11, 16), d.meet.place].filter(Boolean).join(' · '), did: d.id });
+        return;
+      }
       if (d.date) ev.push({ date: d.date, kind: 'doc', label: (d.kind === 'meet' ? '開會通知：' : '發文：') + shortSubj(d), sub: d.no, did: d.id });
       if (d.kind === 'meet' && d.meet && d.meet.time) ev.push({ date: d.meet.time.slice(0, 10), kind: 'meet', label: '會議：' + shortSubj(d), sub: [d.meet.time.slice(11, 16), d.meet.place].filter(Boolean).join(' · '), did: d.id });
     });
@@ -2805,7 +3061,7 @@
   function renderCal(p) {
     if (calY == null) { var t = new Date(); calY = t.getFullYear(); calM = t.getMonth(); }
     $('calTitle').textContent = (calY - 1911) + ' 年 ' + (calM + 1) + ' 月（' + calY + '）';
-    var CF = { all: null, rec: ['rec'], plan: ['plan'], mat: ['mat'], doc: ['doc', 'meet'], daily: ['daily'] };
+    var CF = { all: null, rec: ['rec'], plan: ['plan'], mat: ['mat'], doc: ['doc', 'in', 'meet'], daily: ['daily'] };
     var ev = calEvents(p).filter(function (e) { return !CF[calFilter] || CF[calFilter].indexOf(e.kind) >= 0; }), byDay = {};
     $('calFilter').innerHTML = [['all', '全部'], ['rec', '抽查'], ['plan', '預定'], ['mat', '材料'], ['doc', '公文'], ['daily', '日報']].map(function (f) { return '<button type="button" class="cf' + (calFilter === f[0] ? ' on' : '') + '" data-cf="' + f[0] + '">' + f[1] + '</button>'; }).join('');
     ev.forEach(function (e) { (byDay[e.date] = byDay[e.date] || []).push(e); });
@@ -2823,7 +3079,7 @@
   }
   /* 日曆格子只放各類數量徽章（抽／預／材／文／會），內容在點選當天後的清單 */
   var calFilter = 'all';
-  var BADGE = [['daily', '報'], ['rec', '抽'], ['plan', '預'], ['mat', '材'], ['doc', '文'], ['meet', '會']];
+  var BADGE = [['daily', '報'], ['rec', '抽'], ['plan', '預'], ['mat', '材'], ['doc', '文'], ['in', '收'], ['meet', '會']];
   function calBadges(list) {
     return BADGE.map(function (b) {
       var xs = list.filter(function (e) { return e.kind === b[0]; }); if (!xs.length) return '';
@@ -2900,7 +3156,7 @@
     if (ds.start) { startPlan(p, ds.start); return; }
     if (ds.openrec) { var a = ds.openrec.split('|'); go({ v: 'form', pid: p.id, wid: a[0], rid: a[1] }); return; }
     if (ds.openmat) go({ v: 'matItem', pid: p.id, mid: ds.openmat });
-    if (ds.opendoc) go({ v: 'docEdit', pid: p.id, did: ds.opendoc });
+    if (ds.opendoc) go({ v: docView(p, ds.opendoc), pid: p.id, did: ds.opendoc });
     if (ds.opendr) go({ v: 'dailyEdit', pid: p.id, date: ds.opendr });
   });
   $('calDay').addEventListener('change', function (e) {

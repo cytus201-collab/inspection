@@ -300,7 +300,10 @@
   /* 公文 PDF 歸檔到雲端硬碟「監造公文／工程名稱／收文或發文」（需要新版 Apps Script） */
   function putDoc(o) { return call('putDoc', o); }
   function ocrDoc(id) { return call('ocrDoc', id); }
-  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
+  /* 收文辨識：傳 JPEG（base64）給 Google OCR；改名：確認欄位後依規則重新命名 */
+  function ocrImg(o) { return call('ocrImg', o); }
+  function renameDoc(o) { return call('renameDoc', o); }
+  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };

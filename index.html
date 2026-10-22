@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=55">
+<link rel="stylesheet" href="style.css?v=56">
 </head>
 <body>
 
@@ -370,13 +370,21 @@
 
 <!-- ===== 公文收發 ===== -->
 <main id="vDocs" class="view wrap" hidden>
-  <section class="card">
+  <div class="ui-mode doc-tab" id="docTab" role="group" aria-label="發文或收文"><button type="button" data-dt="out" class="on">發文</button><button type="button" data-dt="in">收文</button></div>
+  <section class="card" id="docInBox" hidden>
+    <div class="head-row"><h2 class="h small">收文</h2>
+      <div class="doc-new"><label class="btn primary sm file-btn">＋ 上傳收文（PDF／照片）<input type="file" id="inFile" accept="application/pdf,image/*" multiple></label></div></div>
+    <p class="muted" id="inHint"></p>
+    <p class="muted" id="inMsg" role="status"></p>
+    <div class="cal-filter" id="inF" role="group" aria-label="篩選"></div>
+    <div id="inList" class="doc-list"></div>
+  </section>
+  <section class="card" id="docOutBox">
     <div class="head-row"><h2 class="h small">發文</h2>
       <div class="doc-new"><button type="button" class="btn primary sm" id="btnNewLetter">＋ 函</button><button type="button" class="btn ghost sm" id="btnNewMeet">＋ 開會通知單</button></div></div>
     <div id="docList" class="doc-list"></div>
-    <p class="muted">收文（掃描公文自動辨識、歸檔）為下一階段功能。</p>
   </section>
-  <details class="card" id="dcSetBox"><summary class="h small">發文設定（本工程）</summary>
+  <details class="card out-only" id="dcSetBox"><summary class="h small">發文設定（本工程）</summary>
     <div class="grid g3">
       <label class="f">案件編號（公司內部）<input id="dcCase" placeholder="例：197"></label>
       <label class="f">字號前綴<input id="dcPrefix" placeholder="例：周建字第"></label>
@@ -389,7 +397,7 @@
       <label class="f">常用正本／副本、出席者（一行一個）<textarea id="dcCc" rows="3" placeholder="東陞鼎營造有限公司、本所監造工務所"></textarea></label>
     </div>
   </details>
-  <details class="card"><summary class="h small">公司設定（全公司共用）</summary>
+  <details class="card out-only"><summary class="h small">公司設定（全公司共用）</summary>
     <div class="grid g3">
       <label class="f">機關名稱<input id="coName"></label>
       <label class="f">地址<input id="coAddr"></label>
@@ -398,6 +406,9 @@
     <div class="seal-box" id="coSealBox"><span class="muted">公司章（建議透明背景 PNG）</span><img id="coSealImg" alt="公司章" hidden>
       <label class="btn ghost sm">上傳公司章<input type="file" id="coSealPick" accept="image/png,image/*" hidden></label></div>
   </details>
+</main>
+<main id="vInEdit" class="view wrap wide" hidden>
+  <div id="inEditBody"></div>
 </main>
 <main id="vDocEdit" class="view wrap" hidden>
   <div id="docEditBody"></div>
@@ -605,9 +616,9 @@
   </div>
 </div>
 
-<script src="data.js?v=55"></script>
-<script src="mat-parse.js?v=55"></script>
-<script src="cloud.js?v=55"></script>
-<script src="app.js?v=55"></script>
+<script src="data.js?v=56"></script>
+<script src="mat-parse.js?v=56"></script>
+<script src="cloud.js?v=56"></script>
+<script src="app.js?v=56"></script>
 </body>
 </html>

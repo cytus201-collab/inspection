@@ -809,3 +809,13 @@ button.kpi{cursor:pointer}
 .pj-sel select{width:100%;max-width:520px;min-height:40px;border:1px solid #e3e3e3;border-radius:10px;background:#fff;padding:6px 32px 6px 12px;font:inherit;font-size:15px;font-weight:600;color:var(--strong)}
 #vProjects .ov-quick{margin:0 0 12px}
 #vProjects .ov-kpi{margin-bottom:14px}
+/* v56 收文 */
+.doc-tab{display:inline-flex;margin-bottom:12px}
+.in-grid{display:grid;gap:14px}
+@media (min-width:961px){.in-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start}.in-pv{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto}}
+.in-pv canvas,.in-pv img{display:block;width:100%;height:auto;border:1px solid #e3e3e3;border-radius:6px;margin-bottom:10px;background:#fff}
+.in-form .f{margin-bottom:10px}
+.in-form .f.miss input,.in-form .f.miss textarea{background:#fff7d6;border-color:#e6c84d}
+.in-note{margin-top:0}
+.in-raw pre{white-space:pre-wrap;font-size:12px;max-height:280px;overflow:auto;background:#fafafa;padding:10px;border-radius:8px}
+.btn.danger{color:#a12}

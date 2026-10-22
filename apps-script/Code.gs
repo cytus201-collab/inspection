@@ -196,6 +196,16 @@ function ocrDoc(id) {
   return text;
 }
 
+/* 收文辨識：網頁把掃描公文的前幾頁轉成 JPEG 傳來（避開雲端 OCR 2MB 限制），暫存後辨識，再刪除暫存檔 */
+function ocrImg(o) {
+  var tmp = docRoot_().createFile(Utilities.newBlob(Utilities.base64Decode(o.data), o.mime || 'image/jpeg', 'ocr-src.jpg'));
+  try { return ocrDoc(tmp.getId()); } finally { try { tmp.setTrashed(true); } catch (e) {} }
+}
+function renameDoc(o) {
+  var f = DriveApp.getFileById(o.id); f.setName(String(o.name || f.getName()).slice(0, 200));
+  return { id: f.getId(), url: f.getUrl() };
+}
+
 /* 第一次使用前由擁有者在編輯器執行一次，完成授權並建立工作表與照片資料夾 */
 function setup() {
   syncSheet_(); sumSheet_(); photoFolder_(); docRoot_();
