@@ -1910,7 +1910,20 @@
     if (b.id === 'inRe') {
       if (window.Cloud && window.Cloud.ocrImg) {
         IDB.get('docf-' + d.id).then(function (u) {
-          if (!u) { if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); } return; }
+          if (!u) {
+            /* 這台裝置沒有原件暫存：改用雲端已歸檔的原檔直接辨識 */
+            if (d.fileId && window.Cloud.ocrDoc) {
+              inBusy[d.id] = '雲端辨識中'; renderInEdit();
+              return window.Cloud.ocrDoc(d.fileId).then(function (t) {
+                d.ocr = 'ok'; d.ocrErr = ''; d.raw = String(t || '').slice(0, 12000);
+                ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { d[k] = ''; }); d.meet = null; d.srcSet = 0;
+                inApply(d, inParse(d.raw), true);
+              }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
+                .then(function () { delete inBusy[d.id]; save(); inRename(p, d); if (cur.v === 'inEdit') renderInEdit(); });
+            }
+            if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); }
+            return;
+          }
           fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { var fl = new File([bl], d.fname || 'in', { type: d.mime || bl.type }); d.ocr = ''; var keep = d.fileId; return inProcessRe(p, d, fl, keep); });
         });
       } else if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); }

@@ -252,3 +252,13 @@ function ocrSelfTest() {
   var t = ocrDoc(best.getId());
   Logger.log('辨識成功，' + t.length + ' 字：\n' + t.slice(0, 1500));
 }
+
+/* 測試用：拿一張雲端照片（網頁產生的 JPEG）走跟收文完全相同的辨識流程 */
+function ocrImgTest() {
+  var it = photoFolder_().getFiles(), f = it.hasNext() ? it.next() : null;
+  if (!f) { Logger.log('沒有照片可測'); return; }
+  var url = 'data:image/jpeg;base64,' + Utilities.base64Encode(f.getBlob().getBytes());
+  Logger.log('測試照片：' + f.getName() + '（' + Math.round(f.getSize() / 1024) + ' KB）');
+  var t = ocrImg(url);
+  Logger.log('圖片辨識成功，' + t.length + ' 字：' + t.slice(0, 300));
+}
