@@ -1775,7 +1775,7 @@
   function inPaint(pid, id) { var pp = proj(pid); if (cur.v === 'docs' && pp) renderInList(pp); if (cur.v === 'inEdit' && cur.did === id) renderInEdit(); }
   /* 辨識一份收文：PDF 文字層（電子公文）→ 直接讀；掃描檔 → 原檔歸檔後，把前 2 頁去印章顏色送 Google 辨識，失敗再改辨識雲端原檔 */
   function inProcess(p, d0, f, tag) {
-    var pid = p.id, id = d0.id, isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, text = '', imgs = [], mime = f.type || (isPdf ? 'application/pdf' : 'image/jpeg');
+    var pid = p.id, id = d0.id, hadFile = !!d0.fileId, isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, text = '', imgs = [], mime = f.type || (isPdf ? 'application/pdf' : 'image/jpeg');
     var step = function (t) { if (t) inBusy[id] = t + (tag || ''); else delete inBusy[id]; inPaint(pid, id); };
     step('讀取中');
     return readAs(f, 'readAsDataURL').then(function (u) { url = u; inUpd(pid, id, function (x) { x.mime = mime; }); return IDB.put('docf-' + id, url).catch(function () {}); })
@@ -1784,11 +1784,11 @@
         return pdfText(pdf, 2).then(function (t) { if (t.replace(/\s/g, '').length > 60) { text = t; return; } return pdfImages(pdf, 2).then(function (xs) { imgs = xs; }); });
       }) : imgJpeg(url).then(function (x) { imgs = [x]; inUpd(pid, id, function (y) { y.pages = 1; }); }); })
       .then(function () {
-        if (text) { inUpd(pid, id, function (x) { x.ocr = 'text'; x.raw = text.slice(0, 12000); inApply(x, inParse(text), false); }); return inArchive(pid, id, url); }
+        if (text) { inUpd(pid, id, function (x) { x.ocr = 'text'; x.raw = text.slice(0, 12000); inApply(x, inParse(text), false); }); return hadFile ? null : inArchive(pid, id, url); }
         var C = window.Cloud;
-        if (!C || !(C.ocrImg || C.ocrFile)) { inUpd(pid, id, function (x) { x.ocr = 'none'; }); return inArchive(pid, id, url); }
-        step('上傳中');
-        return inArchive(pid, id, url).then(function () {
+        if (!C || !(C.ocrImg || C.ocrFile)) { inUpd(pid, id, function (x) { x.ocr = 'none'; }); return hadFile ? null : inArchive(pid, id, url); }
+        if (!hadFile) step('上傳中');
+        return (hadFile ? Promise.resolve() : inArchive(pid, id, url)).then(function () {
           step('辨識中');
           var viaImg = imgs.length && C.ocrImg ? imgs.reduce(function (pr, im) { return pr.then(function () { return inRetry(function () { return C.ocrImg({ data: im, mime: 'image/jpeg' }); }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve()) : Promise.reject(new Error('no image'));
           return viaImg.then(function () {
@@ -1823,6 +1823,16 @@
     return inRetry(function () { return window.Cloud.putDoc({ proj: pp.info.name, dir: '收文', name: name, data: String(url).split(',')[1], mime: d.mime, old: d.fileId || '' }); })
       .then(function (r) { inUpd(pid, id, function (x) { x.fileId = r.id; x.fileUrl = r.url; x.fname = name; x.archErr = ''; }); }, function (e) { inUpd(pid, id, function (x) { x.archErr = cloudErr(e); }); });
   }
+  /* 取得原件檔案：本機暫存優先，否則從雲端下載已歸檔原檔 */
+  function inSource(pid, id) {
+    var x = inFresh(pid, id); if (!x) return Promise.resolve(null);
+    var mk = function (u) { return fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { return new File([bl], x.fname || 'in', { type: x.mime || bl.type }); }); };
+    return IDB.get('docf-' + id).then(function (u) {
+      if (u) return mk(u);
+      if (x.fileId && window.Cloud && window.Cloud.getDoc) return window.Cloud.getDoc(x.fileId).then(function (u2) { IDB.put('docf-' + id, u2).catch(function () {}); return mk(u2); }, function () { return null; });
+      return null;
+    });
+  }
   /* 收文頁打開時：自動接續上次中斷（已歸檔未辨識，或本機有原件但還沒處理）的收文 */
   function inResume(p) {
     var C = window.Cloud; if (!C || !(C.ocrFile || C.ocrImg)) return;
@@ -1832,9 +1842,8 @@
       var pid = p.id, id = d.id;
       inEnqueue(function () {
         var x = inFresh(pid, id); if (!x) { delete inBusy[id]; return; }
-        return IDB.get('docf-' + id).then(function (u) {
-          if (u) return fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { return inProcess(proj(pid), x, new File([bl], x.fname || 'in', { type: x.mime || bl.type })); });
-          if (x.fileId && C.ocrFile) { inBusy[id] = '辨識中'; inPaint(pid, id); return inOcrCloud(pid, id, null, false).then(function () { delete inBusy[id]; inPaint(pid, id); }); }
+        return inSource(pid, id).then(function (fl) {
+          if (fl) return inProcess(proj(pid), x, fl);
           delete inBusy[id]; inPaint(pid, id);
         });
       });
@@ -1983,30 +1992,15 @@
       d.st = 'todo'; save(); inRename(p, d); renderInEdit();
     }
     if (b.id === 'inRe') {
-      if (d.fileId && window.Cloud && window.Cloud.ocrFile) {
-        inBusy[d.id] = '雲端辨識中'; renderInEdit();
-        inOcrCloud(p.id, d.id, null, true).then(function () { delete inBusy[d.id]; if (cur.v === 'inEdit') renderInEdit(); });
-        return;
-      }
-      if (window.Cloud && window.Cloud.ocrImg) {
-        IDB.get('docf-' + d.id).then(function (u) {
-          if (!u) {
-            /* 這台裝置沒有原件暫存：改用雲端已歸檔的原檔直接辨識 */
-            if (d.fileId && window.Cloud.ocrDoc) {
-              inBusy[d.id] = '雲端辨識中'; renderInEdit();
-              return window.Cloud.ocrDoc(d.fileId).then(function (t) {
-                d.ocr = 'ok'; d.ocrErr = ''; d.raw = String(t || '').slice(0, 12000);
-                ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { d[k] = ''; }); d.meet = null; d.srcSet = 0;
-                inApply(d, inParse(d.raw), true);
-              }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
-                .then(function () { delete inBusy[d.id]; save(); inRename(p, d); if (cur.v === 'inEdit') renderInEdit(); });
-            }
-            if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); }
-            return;
-          }
-          fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { var fl = new File([bl], d.fname || 'in', { type: d.mime || bl.type }); d.ocr = ''; var keep = d.fileId; return inProcessRe(p, d, fl, keep); });
-        });
-      } else if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); }
+      /* 重新辨識：取本機原件（沒有就從雲端下載原檔），去印章顏色後重跑辨識；沒有雲端時用已存的辨識原文重新解析 */
+      var pid0 = p.id, id0 = d.id;
+      if (!(window.Cloud && (window.Cloud.ocrImg || window.Cloud.ocrFile))) { if (d.raw) { inApply(d, inParse(d.raw), true); save(); renderInEdit(); } return; }
+      inBusy[id0] = '準備中'; renderInEdit();
+      inEnqueue(function () { return inSource(pid0, id0).then(function (fl) {
+        var x = inFresh(pid0, id0); if (!x) return;
+        if (!fl) { delete inBusy[id0]; if (x.raw) { inApply(x, inParse(x.raw), true); save(); } inPaint(pid0, id0); return; }
+        return inProcessRe(proj(pid0), x, fl);
+      }); });
     }
     if (b.id === 'inDel') ask('刪除這份收文？', '會從本工程移除（雲端已歸檔的檔案不會刪除）。', '取消', '刪除', function () { p.docs = p.docs.filter(function (x) { return x.id !== d.id; }); IDB.del('docf-' + d.id).catch(function () {}); save(); go({ v: 'docs', pid: p.id, tab: 'in' }, true); });
   });

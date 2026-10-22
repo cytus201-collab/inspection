@@ -304,7 +304,8 @@
   function ocrImg(o) { return call('ocrImg', 'data:image/jpeg;base64,' + o.data); }
   function renameDoc(o) { return call('renameDoc', o); }
   function ocrFile(id) { return call('ocrFile', id); }
-  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, ocrFile: ocrFile, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
+  function getDoc(id) { return call('getDoc', id); }
+  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, ocrFile: ocrFile, getDoc: getDoc, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };
