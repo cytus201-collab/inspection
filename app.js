@@ -1819,12 +1819,15 @@
       for (var k = 0; k < L.length; k++) { if (a < 0) { var mt = start.exec(j(L[k])); if (mt) { a = k; var rest = j(L[k]).slice(mt[0].length); if (rest) out.push(rest); } } else { if (stop.test(j(L[k]))) break; out.push(L[k]); } }
       return a < 0 ? null : out;
     };
-    var STOP = /^(說明|辦法|正本|副本|備註|出席者|列席者|開會事由|開會時間|開會地點|主持人|聯絡人|會勘時間|會勘地點)[:：]?/;
+    /* 標籤需帶冒號或獨立成行（避免「回覆說明，請查照」被誤判為說明段開始） */
+    var STOP = /^(說明|辦法|正本|副本|備註|出席者|列席者|開會事由|開會時間|開會地點|主持人|聯絡人|會勘時間|會勘地點)(:|$)/;
     var sb = block(/^主旨:?/, STOP);
     if (sb) { o.subj = j(sb.join('')); var dot = o.subj.lastIndexOf('。'); if (dot > 0) o.subj = o.subj.slice(0, dot + 1); }
-    var db = block(/^說明:?/, /^(辦法|正本|副本|備註)[:：]?/);
+    var db = block(/^說明(:|$)/, /^(辦法|正本|副本|備註)(:|$)/);
     if (db) {
       var items = [];
+      /* 句號後緊接「二、」等項次時斷行；去掉印章殘字（短行、含公司／印／章、無標點） */
+      db = db.join('\n').replace(/。\s*([一二三四五六七八九十]+、)/g, '。\n$1').split('\n').filter(function (x) { var y = j(x); return y && !(y.length <= 8 && /公司|印|章/.test(y) && !/[，。,]/.test(y)); });
       db.forEach(function (x) { var y = j(x); if (/^([一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]+[）)]|\d+[.、])/.test(y) || !items.length) items.push(y); else items[items.length - 1] += y; });
       o.desc = items.join('\n');
     }
