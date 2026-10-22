@@ -1801,7 +1801,8 @@
   /* 解析公文文字（依文書處理手冊格式：機關＋函、發文日期、發文字號、速別、附件、主旨、說明…） */
   function inParse(t) {
     var s = String(t || '').replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xfee0); }).replace(/\r/g, '').replace(/：/g, ':').replace(/[ \t　]+/g, ' ');
-    var L = s.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x && !/^第\s*\d+\s*頁/.test(x) && !/^[（(]?\s*共\s*\d+\s*頁/.test(x); });
+    var L = s.split('\n').map(function (x) { return x.trim(); }).filter(function (x) { return x && !/^第\s*\d+\s*頁/.test(x) && !/^[（(]?\s*共\s*\d+\s*頁/.test(x) && !/校對章|監印章/.test(x); });
+    var zh = function (x) { return String(x || '').replace(/,/g, '，').replace(/:/g, '：').replace(/;/g, '；').replace(/\]/g, '」'); };
     var o = { kind: 'letter', found: {} }, j = function (x) { return x.replace(/\s+/g, ''); };
     var ymd3 = function (y, m, dd) { y = +y; if (y < 1911) y += 1911; return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + dd).slice(-2); };
     for (var i = 0; i < Math.min(L.length, 18); i++) {
@@ -1819,7 +1820,8 @@
       return a < 0 ? null : out;
     };
     var STOP = /^(說明|辦法|正本|副本|備註|出席者|列席者|開會事由|開會時間|開會地點|主持人|聯絡人|會勘時間|會勘地點)[:：]?/;
-    var sb = block(/^主旨:?/, STOP); if (sb) o.subj = j(sb.join(''));
+    var sb = block(/^主旨:?/, STOP);
+    if (sb) { o.subj = j(sb.join('')); var dot = o.subj.lastIndexOf('。'); if (dot > 0) o.subj = o.subj.slice(0, dot + 1); }
     var db = block(/^說明:?/, /^(辦法|正本|副本|備註)[:：]?/);
     if (db) {
       var items = [];
@@ -1839,7 +1841,10 @@
     var body = j((o.subj || '') + '\n' + (o.desc || ''));
     if ((mm = /(\d{2,3})年(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(mm[1], mm[2], mm[3]);
     else if (o.date && (mm = /(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(o.date.slice(0, 4), mm[1], mm[2]);
+    ['subj', 'desc', 'att'].forEach(function (k) { if (o[k]) o[k] = zh(o[k]); });
+    if (o.meet) { o.meet.reason = zh(o.meet.reason); o.meet.place = zh(o.meet.place); if (o.kind === 'meet' && o.subj) o.subj = zh(o.subj); }
     ['org', 'date', 'no', 'subj', 'desc'].forEach(function (k) { o.found[k] = !!o[k]; });
+    if (!o.desc && !/說\s*明/.test(all)) o.found.desc = true;   // 公文本身沒有說明段
     return o;
   }
   function renderInEdit() {
