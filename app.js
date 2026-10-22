@@ -1686,6 +1686,7 @@
     return [(a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : ''), d.no || '', shortSubj(d), d.org || ''].join('_').replace(/[\\/:*?"<>|]/g, '_');
   }
   function renderInList(p) {
+    setTimeout(function () { inResume(p); }, 0);
     var cloud = !!(window.Cloud && window.Cloud.putDoc);
     $('inHint').textContent = cloud ? '上傳掃描的 PDF 或照片，系統會自動辨識來文單位、日期、字號、主旨與說明，確認後歸檔到雲端「監造公文／' + (p.info.name || '工程') + '／收文」。'
       : '個人版沒有雲端辨識：電子公文（PDF 內含文字）可自動讀取；掃描檔請手動填寫欄位。共編版可使用 Google 辨識並歸檔到雲端。';
@@ -1709,7 +1710,8 @@
       (p.docs = p.docs || []).push(d); inBusy[d.id] = '排隊中'; return d;
     });
     save(); renderInList(p);
-    docs.reduce(function (pr, d, i) { return pr.then(function () { return inProcess(p, d, files[i]); }); }, Promise.resolve()).then(function () {
+    docs.forEach(function (d, i) { inResumed[d.id] = 1; inEnqueue(function () { return inProcess(proj(p.id) || p, d, files[i], docs.length > 1 ? '（' + (i + 1) + '/' + docs.length + '）' : ''); }); });
+    inEnqueue(function () {
       $('inMsg').textContent = docs.length + ' 份收文已加入，請逐份點開確認欄位。';
       if (docs.length === 1 && cur.v === 'docs') go({ v: 'inEdit', pid: p.id, did: docs[0].id });
     });
@@ -1734,7 +1736,16 @@
     }));
     return Promise.all(jobs).then(function (t) { return t.join('\n'); });
   }
-  function canvasJpeg(cv) { return cv.toDataURL('image/jpeg', 0.85).split(',')[1]; }
+  /* 送辨識的圖片：去掉印章顏色（紅色、藍色等高彩度像素改成白色），文字多為黑灰色不受影響 */
+  function inJpeg(cv) {
+    var cx = cv.getContext('2d'), im = cx.getImageData(0, 0, cv.width, cv.height), a = im.data;
+    for (var i = 0; i < a.length; i += 4) {
+      var r = a[i], g = a[i + 1], b = a[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      if (mx - mn > 26 || (mx - mn > 14 && mx > 150)) { a[i] = a[i + 1] = a[i + 2] = 255; }
+    }
+    cx.putImageData(im, 0, 0);
+    return cv.toDataURL('image/jpeg', 0.85).split(',')[1];
+  }
   function pdfImages(pdf, n) {
     var out = [], chain = Promise.resolve();
     for (var i = 1; i <= Math.min(n, pdf.numPages); i++) (function (k) {
@@ -1742,68 +1753,98 @@
         var v1 = pg.getViewport({ scale: 1 }), sc = Math.min(2.6, 1800 / v1.width), vp = pg.getViewport({ scale: sc });
         var cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
         var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
-        return pg.render({ canvasContext: cx, viewport: vp }).promise.then(function () { out.push(canvasJpeg(cv)); });
+        return pg.render({ canvasContext: cx, viewport: vp }).promise.then(function () { out.push(inJpeg(cv)); });
       });
     })(i);
     return chain.then(function () { return out; });
   }
   function imgJpeg(dataUrl) {
     return new Promise(function (res, rej) {
-      var im = new Image(); im.onload = function () { var sc = Math.min(1, 2000 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc); var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height); res(canvasJpeg(cv)); };
+      var im = new Image(); im.onload = function () { var sc = Math.min(1, 2000 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * sc); cv.height = Math.round(im.height * sc); var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height); cx.drawImage(im, 0, 0, cv.width, cv.height); res(inJpeg(cv)); };
       im.onerror = function () { rej(new Error('無法讀取圖片')); }; im.src = dataUrl;
     });
   }
   function cloudErr(e) { var m = String(e && e.message || e); return /reading 'apply'|Script function .* not found|Drive API 服務未啟用|Drive is not defined/i.test(m) && !/Google 轉檔失敗|無法取回/.test(m) ? 'need' : m; }
-  /* 辨識一份收文：先找 PDF 文字層，沒有再送 Google OCR（前 2 頁，公文本文通常在此） */
-  function inProcess(p, d, f) {
-    var isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, buf, text = '', imgs = [];
-    var step = function (t) { inBusy[d.id] = t; if (cur.v === 'docs') renderInList(p); if (cur.v === 'inEdit' && cur.did === d.id) renderInEdit(); };
+  /* 共編同步可能把收文換成新物件：每次寫入前重新取得最新的那筆 */
+  function inFresh(pid, id) { var pp = proj(pid); return pp && docById(pp, id); }
+  function inUpd(pid, id, fn) { var x = inFresh(pid, id); if (x) { fn(x); save(); } return x; }
+  /* 暫時性錯誤（雲端忙碌）自動重試一次 */
+  function inRetry(fn) { return fn().catch(function (e) { if (cloudErr(e) === 'need') throw e; return new Promise(function (r) { setTimeout(r, 4000); }).then(fn); }); }
+  var inQueue = Promise.resolve(), inResumed = {};
+  function inEnqueue(fn) { inQueue = inQueue.then(fn, fn); return inQueue; }
+  function inPaint(pid, id) { var pp = proj(pid); if (cur.v === 'docs' && pp) renderInList(pp); if (cur.v === 'inEdit' && cur.did === id) renderInEdit(); }
+  /* 辨識一份收文：PDF 文字層（電子公文）→ 直接讀；掃描檔 → 原檔歸檔後，把前 2 頁去印章顏色送 Google 辨識，失敗再改辨識雲端原檔 */
+  function inProcess(p, d0, f, tag) {
+    var pid = p.id, id = d0.id, isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, text = '', imgs = [], mime = f.type || (isPdf ? 'application/pdf' : 'image/jpeg');
+    var step = function (t) { if (t) inBusy[id] = t + (tag || ''); else delete inBusy[id]; inPaint(pid, id); };
     step('讀取中');
-    return readAs(f, 'readAsDataURL').then(function (u) { url = u; d.mime = f.type || (isPdf ? 'application/pdf' : 'image/jpeg'); return IDB.put('docf-' + d.id, url).catch(function () {}); })
-      .then(function () { return isPdf ? readAs(f, 'readAsArrayBuffer').then(function (b) { buf = b; return loadPdf(b); }).then(function (pdf) {
-        d.pages = pdf.numPages;
-        return pdfText(pdf, 2).then(function (t) { if (t.replace(/\s/g, '').length > 60) { text = t; d.ocr = 'text'; return; } return pdfImages(pdf, 2).then(function (xs) { imgs = xs; }); });
-      }) : imgJpeg(url).then(function (x) { imgs = [x]; d.pages = 1; }); })
+    return readAs(f, 'readAsDataURL').then(function (u) { url = u; inUpd(pid, id, function (x) { x.mime = mime; }); return IDB.put('docf-' + id, url).catch(function () {}); })
+      .then(function () { return isPdf ? readAs(f, 'readAsArrayBuffer').then(loadPdf).then(function (pdf) {
+        inUpd(pid, id, function (x) { x.pages = pdf.numPages; });
+        return pdfText(pdf, 2).then(function (t) { if (t.replace(/\s/g, '').length > 60) { text = t; return; } return pdfImages(pdf, 2).then(function (xs) { imgs = xs; }); });
+      }) : imgJpeg(url).then(function (x) { imgs = [x]; inUpd(pid, id, function (y) { y.pages = 1; }); }); })
       .then(function () {
-        if (text) { d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); save(); return inArchive(p, d, url); }
-        /* 掃描檔：先把原檔歸檔到雲端，再由雲端直接辨識原檔（實測最穩定） */
-        if (window.Cloud && window.Cloud.ocrFile) {
-          step('上傳中');
-          return inArchive(p, d, url).then(function () {
-            if (!d.fileId) { d.ocr = 'fail'; d.ocrErr = '原檔歸檔失敗：' + (d.archErr || ''); return; }
-            return inOcrCloud(p, d, step);
+        if (text) { inUpd(pid, id, function (x) { x.ocr = 'text'; x.raw = text.slice(0, 12000); inApply(x, inParse(text), false); }); return inArchive(pid, id, url); }
+        var C = window.Cloud;
+        if (!C || !(C.ocrImg || C.ocrFile)) { inUpd(pid, id, function (x) { x.ocr = 'none'; }); return inArchive(pid, id, url); }
+        step('上傳中');
+        return inArchive(pid, id, url).then(function () {
+          step('辨識中');
+          var viaImg = imgs.length && C.ocrImg ? imgs.reduce(function (pr, im) { return pr.then(function () { return inRetry(function () { return C.ocrImg({ data: im, mime: 'image/jpeg' }); }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve()) : Promise.reject(new Error('no image'));
+          return viaImg.then(function () {
+            inUpd(pid, id, function (x) { x.ocr = 'ok'; x.ocrErr = ''; x.raw = text.slice(0, 12000); inApply(x, inParse(text), false); });
+          }, function (e) {
+            var x = inFresh(pid, id);
+            if (x && x.fileId && C.ocrFile) return inOcrCloud(pid, id, null, false);
+            inUpd(pid, id, function (y) { y.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; y.ocrErr = String(e && e.message || e).slice(0, 400); });
           });
-        }
-        if (!imgs.length || !(window.Cloud && window.Cloud.ocrImg)) { d.ocr = 'none'; save(); return inArchive(p, d, url); }
-        step('辨識中');
-        return imgs.reduce(function (pr, im) { return pr.then(function () { return window.Cloud.ocrImg({ data: im, mime: 'image/jpeg' }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve())
-          .then(function () { d.ocr = 'ok'; d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
-          .then(function () { save(); return inArchive(p, d, url); });
+        });
       })
-      .catch(function (e) { d.ocr = 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 200); save(); })
-      .then(function () { delete inBusy[d.id]; step(null); delete inBusy[d.id]; if (cur.v === 'docs') renderInList(p); if (cur.v === 'inEdit' && cur.did === d.id) renderInEdit(); });
+      .catch(function (e) { inUpd(pid, id, function (x) { x.ocr = 'fail'; x.ocrErr = String(e && e.message || e).slice(0, 400); }); })
+      .then(function () { var x = inFresh(pid, id); if (x && x.ocr === 'ok') inRename(proj(pid), x); step(null); });
   }
   /* 雲端辨識已歸檔原檔，帶入欄位後依規則改檔名 */
-  function inOcrCloud(p, d, step, force) {
+  function inOcrCloud(pid, id, step, force) {
     if (step) step('辨識中');
-    return window.Cloud.ocrFile(d.fileId).then(function (t) {
-      d.ocr = 'ok'; d.ocrErr = ''; d.raw = String(t || '').slice(0, 12000);
-      if (force) { ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { d[k] = ''; }); d.meet = null; d.srcSet = 0; }
-      inApply(d, inParse(d.raw), !!force);
-    }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
-      .then(function () { save(); inRename(p, d); });
+    var d = inFresh(pid, id); if (!d || !d.fileId) return Promise.resolve();
+    return inRetry(function () { return window.Cloud.ocrFile(d.fileId); }).then(function (t) {
+      inUpd(pid, id, function (x) {
+        x.ocr = 'ok'; x.ocrErr = ''; x.raw = String(t || '').slice(0, 12000);
+        if (force) { ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { x[k] = ''; }); x.meet = null; x.srcSet = 0; }
+        inApply(x, inParse(x.raw), !!force);
+      });
+    }, function (e) { inUpd(pid, id, function (x) { x.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; x.ocrErr = String(e && e.message || e).slice(0, 400); }); })
+      .then(function () { var x = inFresh(pid, id); if (x) inRename(proj(pid), x); });
   }
-  function inArchive(p, d, url) {
-    if (!(window.Cloud && window.Cloud.putDoc) || !url) return Promise.resolve();
+  function inArchive(pid, id, url) {
+    var d = inFresh(pid, id), pp = proj(pid);
+    if (!d || !(window.Cloud && window.Cloud.putDoc) || !url) return Promise.resolve();
     var name = inFileName(d) + (/pdf/.test(d.mime) ? '.pdf' : '.jpg');
-    return window.Cloud.putDoc({ proj: p.info.name, dir: '收文', name: name, data: String(url).split(',')[1], mime: d.mime, old: d.fileId || '' })
-      .then(function (r) { d.fileId = r.id; d.fileUrl = r.url; d.fname = name; save(); }, function (e) { d.archErr = cloudErr(e); save(); });
+    return inRetry(function () { return window.Cloud.putDoc({ proj: pp.info.name, dir: '收文', name: name, data: String(url).split(',')[1], mime: d.mime, old: d.fileId || '' }); })
+      .then(function (r) { inUpd(pid, id, function (x) { x.fileId = r.id; x.fileUrl = r.url; x.fname = name; x.archErr = ''; }); }, function (e) { inUpd(pid, id, function (x) { x.archErr = cloudErr(e); }); });
+  }
+  /* 收文頁打開時：自動接續上次中斷（已歸檔未辨識，或本機有原件但還沒處理）的收文 */
+  function inResume(p) {
+    var C = window.Cloud; if (!C || !(C.ocrFile || C.ocrImg)) return;
+    (p.docs || []).forEach(function (d) {
+      if (d.dir !== 'in' || d.raw || (d.ocr && d.ocr !== 'none') || inBusy[d.id] || inResumed[d.id]) return;
+      inResumed[d.id] = 1; inBusy[d.id] = '排隊中';
+      var pid = p.id, id = d.id;
+      inEnqueue(function () {
+        var x = inFresh(pid, id); if (!x) { delete inBusy[id]; return; }
+        return IDB.get('docf-' + id).then(function (u) {
+          if (u) return fetch(u).then(function (r) { return r.blob(); }).then(function (bl) { return inProcess(proj(pid), x, new File([bl], x.fname || 'in', { type: x.mime || bl.type })); });
+          if (x.fileId && C.ocrFile) { inBusy[id] = '辨識中'; inPaint(pid, id); return inOcrCloud(pid, id, null, false).then(function () { delete inBusy[id]; inPaint(pid, id); }); }
+          delete inBusy[id]; inPaint(pid, id);
+        });
+      });
+    });
   }
   /* 欄位確認後檔名改變：雲端改名（舊版 Apps Script 沒有改名功能時重新上傳） */
   function inRename(p, d) {
     if (!d.fileId || !window.Cloud) return;
     var name = inFileName(d) + (/pdf/.test(d.mime || 'pdf') ? '.pdf' : '.jpg'); if (name === d.fname) return;
-    var redo = function () { return IDB.get('docf-' + d.id).then(function (u) { if (u) return inArchive(p, d, u); }); };
+    var redo = function () { return IDB.get('docf-' + d.id).then(function (u) { if (u) return inArchive(p.id, d.id, u); }); };
     (window.Cloud.renameDoc ? window.Cloud.renameDoc({ id: d.fileId, name: name }).then(function (r) { d.fname = name; if (r && r.url) d.fileUrl = r.url; save(); }, redo) : redo());
   }
   function inApply(d, o, force) {
@@ -1864,6 +1905,17 @@
     var body = j((o.subj || '') + '\n' + (o.desc || ''));
     if ((mm = /(\d{2,3})年(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(mm[1], mm[2], mm[3]);
     else if (o.date && (mm = /(\d{1,2})月(\d{1,2})日(?:[（(][^）)]{1,4}[）)])?(?:以)?前/.exec(body))) o.due = ymd3(o.date.slice(0, 4), mm[1], mm[2]);
+    /* 去掉印章殘字：句號後沒有標點的短尾巴、與來文單位名稱高度重疊的字串、®© 等符號 */
+    var orgChars = (o.org || '') + '有限公司股份印章';
+    var stampy = function (t) { var cs = t.replace(/[^\u4e00-\u9fa5]/g, ''); if (!cs) return true; var hit = 0; for (var q = 0; q < cs.length; q++) if (orgChars.indexOf(cs[q]) >= 0) hit++; return hit / cs.length >= 0.5 || /[®©™@#]/.test(t); };
+    var tidy = function (t) {
+      t = String(t || '').replace(/[®©™]/g, '');
+      var k = t.lastIndexOf('。');
+      if (k >= 0 && k < t.length - 1) { var tail = t.slice(k + 1); if (!/[，。、；：,:;]/.test(tail) && (tail.length <= 30 || stampy(tail))) t = t.slice(0, k + 1); }
+      return t;
+    };
+    if (o.subj) o.subj = tidy(o.subj);
+    if (o.desc) o.desc = o.desc.split('\n').map(tidy).filter(function (x) { return x && !(!/[，。、；：,:;]/.test(x) && x.length <= 30 && stampy(x)); }).join('\n');
     ['subj', 'desc', 'att'].forEach(function (k) { if (o[k]) o[k] = zh(o[k]); });
     if (o.meet) { o.meet.reason = zh(o.meet.reason); o.meet.place = zh(o.meet.place); if (o.kind === 'meet' && o.subj) o.subj = zh(o.subj); }
     ['org', 'date', 'no', 'subj', 'desc'].forEach(function (k) { o.found[k] = !!o[k]; });
@@ -1933,7 +1985,7 @@
     if (b.id === 'inRe') {
       if (d.fileId && window.Cloud && window.Cloud.ocrFile) {
         inBusy[d.id] = '雲端辨識中'; renderInEdit();
-        inOcrCloud(p, d, null, true).then(function () { delete inBusy[d.id]; if (cur.v === 'inEdit') renderInEdit(); });
+        inOcrCloud(p.id, d.id, null, true).then(function () { delete inBusy[d.id]; if (cur.v === 'inEdit') renderInEdit(); });
         return;
       }
       if (window.Cloud && window.Cloud.ocrImg) {
