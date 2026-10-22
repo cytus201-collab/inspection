@@ -303,7 +303,8 @@
   /* 收文辨識：傳 JPEG（base64）給 Google OCR；改名：確認欄位後依規則重新命名 */
   function ocrImg(o) { return call('ocrImg', 'data:image/jpeg;base64,' + o.data); }
   function renameDoc(o) { return call('renameDoc', o); }
-  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
+  function ocrFile(id) { return call('ocrFile', id); }
+  window.Cloud = { init: init, putDoc: putDoc, ocrDoc: ocrDoc, ocrImg: ocrImg, ocrFile: ocrFile, renameDoc: renameDoc, me: function () { return me; }, editors: function (id) { return editors(id); },
     viewChanged: function () { if (started && editingId() !== beat.id) { clearTimeout(timer); timer = setTimeout(cycle, 300); } }, changed: changed, uploadPhoto: uploadPhoto, getPhoto: getPhoto, syncNow: cycle, pending: function () { return pending(); },
     unsynced: function () { return started && !outdated ? Object.keys(meta.dirty).length + meta.photoQ.length : 0; },
     reload: function () { meta = { hash: {}, since: 0, photoQ: meta.photoQ, up: meta.up, dirty: {}, seen: {}, v: 2 }; keep(); fullDone = false; return cycle(); } };

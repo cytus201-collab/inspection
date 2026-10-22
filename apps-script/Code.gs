@@ -212,7 +212,10 @@ function ocrText_(docId) {
 function ocrBlob_(blob) {
   if (typeof Drive === 'undefined' || !Drive.Files) throw new Error('Drive API 服務未啟用');
   var G = 'application/vnd.google-apps.document', F = Drive.Files, tries = [], errs = [], made = null;
-  if (typeof F.create === 'function') [{ ocr: true, ocrLanguage: 'zh' }, { ocrLanguage: 'zh-TW' }, {}].forEach(function (op) { tries.push(function () { return F.create({ name: 'ocr-tmp', mimeType: G }, blob, op); }); });
+  /* 實測：PDF 可帶 ocrLanguage:'zh'；圖片帶任何 ocrLanguage 都回 Invalid Value，不帶參數或 zh-Hant 才成功 */
+  var isPdf = /pdf/i.test(blob.getContentType() || '');
+  var ops = isPdf ? [{ ocr: true, ocrLanguage: 'zh' }, { ocrLanguage: 'zh-Hant' }, {}] : [{}, { ocrLanguage: 'zh-Hant' }];
+  if (typeof F.create === 'function') ops.forEach(function (op) { tries.push(function () { return F.create({ name: 'ocr-tmp', mimeType: G }, blob, op); }); });
   if (typeof F.insert === 'function') [{ ocr: true, ocrLanguage: 'zh-TW' }, { ocr: true }].forEach(function (op) { tries.push(function () { return F.insert({ title: 'ocr-tmp', mimeType: G }, blob, op); }); });
   if (!tries.length) throw new Error('Drive API 服務未啟用');
   for (var i = 0; i < tries.length && !made; i++) {
@@ -223,6 +226,18 @@ function ocrBlob_(blob) {
   return ocrText_(made);
 }
 function ocrDoc(id) { return ocrBlob_(DriveApp.getFileById(id).getBlob()); }
+/* 收文辨識（主要路徑）：直接辨識已歸檔的原檔；失敗（例如檔案過大）時改用雲端硬碟產生的第 1 頁大圖再辨識 */
+function ocrFile(id) {
+  try { return ocrDoc(id); }
+  catch (e1) {
+    try {
+      var link = String(Drive.Files.get(id, { fields: 'thumbnailLink' }).thumbnailLink || '');
+      if (!link) throw e1;
+      var img = UrlFetchApp.fetch(link.replace(/=s\d+$/, '') + '=s2000', { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } }).getBlob();
+      return ocrBlob_(Utilities.newBlob(img.getBytes(), img.getContentType() || 'image/png', 'ocr-page1'));
+    } catch (e2) { throw new Error(e1.message + '／第 1 頁圖片：' + e2.message); }
+  }
+}
 
 /* 收文辨識：網頁把掃描公文的前幾頁轉成 JPEG 傳來（避開雲端 OCR 2MB 限制），暫存後辨識，再刪除暫存檔 */
 function ocrImg(o) {

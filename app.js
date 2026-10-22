@@ -1765,18 +1765,33 @@
         return pdfText(pdf, 2).then(function (t) { if (t.replace(/\s/g, '').length > 60) { text = t; d.ocr = 'text'; return; } return pdfImages(pdf, 2).then(function (xs) { imgs = xs; }); });
       }) : imgJpeg(url).then(function (x) { imgs = [x]; d.pages = 1; }); })
       .then(function () {
-        if (text || !imgs.length) return;
-        if (!(window.Cloud && window.Cloud.ocrImg)) { d.ocr = 'none'; return; }
+        if (text) { d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); save(); return inArchive(p, d, url); }
+        /* 掃描檔：先把原檔歸檔到雲端，再由雲端直接辨識原檔（實測最穩定） */
+        if (window.Cloud && window.Cloud.ocrFile) {
+          step('上傳中');
+          return inArchive(p, d, url).then(function () {
+            if (!d.fileId) { d.ocr = 'fail'; d.ocrErr = '原檔歸檔失敗：' + (d.archErr || ''); return; }
+            return inOcrCloud(p, d, step);
+          });
+        }
+        if (!imgs.length || !(window.Cloud && window.Cloud.ocrImg)) { d.ocr = 'none'; save(); return inArchive(p, d, url); }
         step('辨識中');
         return imgs.reduce(function (pr, im) { return pr.then(function () { return window.Cloud.ocrImg({ data: im, mime: 'image/jpeg' }).then(function (t) { text += (text ? '\n' : '') + t; }); }); }, Promise.resolve())
-          .then(function () { d.ocr = 'ok'; }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); });
-      })
-      .then(function () {
-        if (text) { d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); }
-        save(); return inArchive(p, d, url);
+          .then(function () { d.ocr = 'ok'; d.raw = text.slice(0, 12000); inApply(d, inParse(text), false); }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
+          .then(function () { save(); return inArchive(p, d, url); });
       })
       .catch(function (e) { d.ocr = 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 200); save(); })
       .then(function () { delete inBusy[d.id]; step(null); delete inBusy[d.id]; if (cur.v === 'docs') renderInList(p); if (cur.v === 'inEdit' && cur.did === d.id) renderInEdit(); });
+  }
+  /* 雲端辨識已歸檔原檔，帶入欄位後依規則改檔名 */
+  function inOcrCloud(p, d, step, force) {
+    if (step) step('辨識中');
+    return window.Cloud.ocrFile(d.fileId).then(function (t) {
+      d.ocr = 'ok'; d.ocrErr = ''; d.raw = String(t || '').slice(0, 12000);
+      if (force) { ['org', 'date', 'no', 'speed', 'att', 'subj', 'desc', 'due'].forEach(function (k) { d[k] = ''; }); d.meet = null; d.srcSet = 0; }
+      inApply(d, inParse(d.raw), !!force);
+    }, function (e) { d.ocr = cloudErr(e) === 'need' ? 'need' : 'fail'; d.ocrErr = String(e && e.message || e).slice(0, 400); })
+      .then(function () { save(); inRename(p, d); });
   }
   function inArchive(p, d, url) {
     if (!(window.Cloud && window.Cloud.putDoc) || !url) return Promise.resolve();
@@ -1859,7 +1874,7 @@
     var sel = function (k, lab, opts) { return '<label class="f"><span>' + lab + '</span><select data-inf2="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (d[k] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>'; };
     var M = d.meet || {};
     var ocrNote = busy ? '⏳ ' + busy + '…' : d.ocr === 'text' ? '已從 PDF 文字層讀取（電子公文，準確）。' : d.ocr === 'ok' ? '已由 Google 辨識自動帶入，黃色欄位沒有辨識到，請核對原件。' :
-      d.ocr === 'need' ? '雲端辨識尚未啟用：請更新 Apps Script 並加入「Drive API」服務後重新部署，再按「重新辨識」。' + (d.ocrErr ? '（' + esc(d.ocrErr) + '）' : '') : d.ocr === 'fail' ? '辨識失敗：' + esc(d.ocrErr || '') + '，可按「重新辨識」或手動填寫。' : '請對照原件填寫欄位（個人版無雲端辨識）。';
+      d.ocr === 'need' ? '雲端辨識尚未啟用：請更新 Apps Script 並加入「Drive API」服務後重新部署，再按「重新辨識」。' + (d.ocrErr ? '（' + esc(d.ocrErr) + '）' : '') : d.ocr === 'fail' ? '辨識失敗：' + esc(d.ocrErr || '') + '，可按「重新辨識」或手動填寫。' : (window.Cloud ? '上傳當時無法使用雲端辨識，請按「重新辨識」。' : '請對照原件填寫欄位（個人版無雲端辨識）。');
     $('inEditBody').innerHTML =
       '<div class="in-grid"><section class="card in-pv" id="inPv" aria-label="原件"><p class="muted">載入原件中…</p></section>' +
       '<section class="card in-form"><p class="muted in-note">' + ocrNote + '</p>' +
@@ -1874,7 +1889,7 @@
       ta('note', '備註', 2) +
       '<p class="muted">檔名：' + esc(inFileName(d)) + (d.fileId ? '　<span class="doc-ok">已歸檔</span>' : d.archErr === 'need' ? '　（雲端歸檔需要更新 Apps Script）' : '') + '</p>' +
       '<div class="btn-row">' + (d.st === 'check' ? '<button type="button" class="btn primary" id="inOk">確認欄位</button>' : '') +
-      ((window.Cloud && window.Cloud.ocrImg) || d.raw ? '<button type="button" class="btn ghost sm" id="inRe">重新辨識</button>' : '') +
+      ((window.Cloud && (window.Cloud.ocrImg || window.Cloud.ocrFile)) || d.raw ? '<button type="button" class="btn ghost sm" id="inRe">重新辨識</button>' : '') +
       (d.fileUrl ? '<a class="btn ghost sm" href="' + esc(d.fileUrl) + '" target="_blank" rel="noopener">開啟雲端原檔</a>' : '') +
       '<button type="button" class="btn ghost sm danger" id="inDel">刪除</button></div>' +
       (d.raw ? '<details class="in-raw"><summary class="muted">辨識原文</summary><pre>' + esc(d.raw) + '</pre></details>' : '') +
@@ -1911,6 +1926,11 @@
       d.st = 'todo'; save(); inRename(p, d); renderInEdit();
     }
     if (b.id === 'inRe') {
+      if (d.fileId && window.Cloud && window.Cloud.ocrFile) {
+        inBusy[d.id] = '雲端辨識中'; renderInEdit();
+        inOcrCloud(p, d, null, true).then(function () { delete inBusy[d.id]; if (cur.v === 'inEdit') renderInEdit(); });
+        return;
+      }
       if (window.Cloud && window.Cloud.ocrImg) {
         IDB.get('docf-' + d.id).then(function (u) {
           if (!u) {
