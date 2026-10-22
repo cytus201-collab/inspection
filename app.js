@@ -1753,7 +1753,7 @@
       im.onerror = function () { rej(new Error('無法讀取圖片')); }; im.src = dataUrl;
     });
   }
-  function cloudErr(e) { return /apply|not found|找不到|Script function|is not a function|Drive is not defined|Drive API/i.test(e && e.message || '') ? 'need' : (e && e.message || String(e)); }
+  function cloudErr(e) { var m = String(e && e.message || e); return /reading 'apply'|Script function .* not found|Drive API 服務未啟用|Drive is not defined/i.test(m) && !/Google 轉檔失敗|無法取回/.test(m) ? 'need' : m; }
   /* 辨識一份收文：先找 PDF 文字層，沒有再送 Google OCR（前 2 頁，公文本文通常在此） */
   function inProcess(p, d, f) {
     var isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name), url, buf, text = '', imgs = [];
@@ -1851,7 +1851,7 @@
     var sel = function (k, lab, opts) { return '<label class="f"><span>' + lab + '</span><select data-inf2="' + k + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (d[k] === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>'; };
     var M = d.meet || {};
     var ocrNote = busy ? '⏳ ' + busy + '…' : d.ocr === 'text' ? '已從 PDF 文字層讀取（電子公文，準確）。' : d.ocr === 'ok' ? '已由 Google 辨識自動帶入，黃色欄位沒有辨識到，請核對原件。' :
-      d.ocr === 'need' ? '雲端辨識尚未啟用：請依說明更新 Apps Script 並加入「Drive API」服務後重新部署，再按「重新辨識」。' : d.ocr === 'fail' ? '辨識失敗：' + esc(d.ocrErr || '') + '，可按「重新辨識」或手動填寫。' : '請對照原件填寫欄位（個人版無雲端辨識）。';
+      d.ocr === 'need' ? '雲端辨識尚未啟用：請更新 Apps Script 並加入「Drive API」服務後重新部署，再按「重新辨識」。' + (d.ocrErr ? '（' + esc(d.ocrErr) + '）' : '') : d.ocr === 'fail' ? '辨識失敗：' + esc(d.ocrErr || '') + '，可按「重新辨識」或手動填寫。' : '請對照原件填寫欄位（個人版無雲端辨識）。';
     $('inEditBody').innerHTML =
       '<div class="in-grid"><section class="card in-pv" id="inPv" aria-label="原件"><p class="muted">載入原件中…</p></section>' +
       '<section class="card in-form"><p class="muted in-note">' + ocrNote + '</p>' +

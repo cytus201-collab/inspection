@@ -197,26 +197,30 @@ function getDoc(id) {
   var f = DriveApp.getFileById(id);
   return 'data:' + f.getMimeType() + ';base64,' + Utilities.base64Encode(f.getBlob().getBytes());
 }
-/* 掃描公文文字辨識：需在編輯器「服務」加入 Drive API。轉成 Google 文件（OCR）取出文字後刪除暫存檔。
-   語言代碼依序嘗試 zh-TW、zh、不指定（Drive API v3 對代碼格式較嚴格），v2 服務則用 ocr:true */
-var OCR_LANGS = ['zh-TW', 'zh', ''];
+/* 掃描公文文字辨識（需在編輯器「服務」加入 Drive API）：
+   1. 用 Drive.Files.create 把圖片轉成 Google 文件（Google 官方 OCR，語言提示 zh）
+   2. 用 Drive 匯出成純文字取回（不需要另外授權 Google 文件權限），再刪除暫存文件 */
 function ocrText_(docId) {
-  try { return DocumentApp.openById(docId).getBody().getText(); }
-  finally { try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {} }
-}
-function ocrTry_(fns) {
-  var errs = [];
-  for (var i = 0; i < fns.length; i++) {
-    try { var r = fns[i](); if (r && r.id) return ocrText_(r.id); }
-    catch (e) { var m = String(e && e.message || e).slice(0, 160); if (errs.indexOf(m) < 0) errs.push(m); }
-  }
-  throw new Error(errs.join('／') || '辨識失敗');
+  try {
+    var r = UrlFetchApp.fetch('https://www.googleapis.com/drive/v3/files/' + docId + '/export?mimeType=text/plain',
+      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) return r.getContentText('UTF-8');
+    try { return DocumentApp.openById(docId).getBody().getText(); }
+    catch (e) { throw new Error('辨識完成但無法取回文字（' + r.getResponseCode() + '；' + e.message + '）'); }
+  } finally { try { DriveApp.getFileById(docId).setTrashed(true); } catch (e) {} }
 }
 function ocrBlob_(blob) {
-  var G = 'application/vnd.google-apps.document', fns = [];
-  OCR_LANGS.forEach(function (lg) { fns.push(function () { return Drive.Files.create({ name: 'ocr-tmp', mimeType: G }, blob, lg ? { ocrLanguage: lg } : {}); }); });
-  OCR_LANGS.forEach(function (lg) { fns.push(function () { return Drive.Files.insert({ title: 'ocr-tmp', mimeType: G }, blob, lg ? { ocr: true, ocrLanguage: lg } : { ocr: true }); }); });
-  return ocrTry_(fns);
+  if (typeof Drive === 'undefined' || !Drive.Files) throw new Error('Drive API 服務未啟用');
+  var G = 'application/vnd.google-apps.document', F = Drive.Files, tries = [], errs = [], made = null;
+  if (typeof F.create === 'function') [{ ocr: true, ocrLanguage: 'zh' }, { ocrLanguage: 'zh-TW' }, {}].forEach(function (op) { tries.push(function () { return F.create({ name: 'ocr-tmp', mimeType: G }, blob, op); }); });
+  if (typeof F.insert === 'function') [{ ocr: true, ocrLanguage: 'zh-TW' }, { ocr: true }].forEach(function (op) { tries.push(function () { return F.insert({ title: 'ocr-tmp', mimeType: G }, blob, op); }); });
+  if (!tries.length) throw new Error('Drive API 服務未啟用');
+  for (var i = 0; i < tries.length && !made; i++) {
+    try { var r = tries[i](); if (r && r.id) made = r.id; }
+    catch (e) { var m = String(e && e.message || e).slice(0, 160); if (errs.indexOf(m) < 0) errs.push(m); }
+  }
+  if (!made) throw new Error('Google 轉檔失敗：' + errs.join('／'));
+  return ocrText_(made);
 }
 function ocrDoc(id) { return ocrBlob_(DriveApp.getFileById(id).getBlob()); }
 
