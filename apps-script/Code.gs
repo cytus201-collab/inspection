@@ -239,3 +239,16 @@ function setup() {
   syncSheet_(); sumSheet_(); photoFolder_(); docRoot_();
   Logger.log('完成：已建立「抽查紀錄總覽」「_sync」與照片資料夾');
 }
+
+/* 測試用：在編輯器執行，辨識「監造公文」裡最新的一份收文，結果看「執行記錄」 */
+function ocrSelfTest() {
+  var best = null, root = docRoot_(), ps = root.getFolders();
+  while (ps.hasNext()) {
+    var it = ps.next().getFoldersByName('收文');
+    while (it.hasNext()) { var fs = it.next().getFiles(); while (fs.hasNext()) { var f = fs.next(); if (!best || f.getDateCreated() > best.getDateCreated()) best = f; } }
+  }
+  if (!best) { Logger.log('監造公文資料夾裡還沒有收文'); return; }
+  Logger.log('測試檔：' + best.getName() + '（' + Math.round(best.getSize() / 1024) + ' KB）');
+  var t = ocrDoc(best.getId());
+  Logger.log('辨識成功，' + t.length + ' 字：\n' + t.slice(0, 1500));
+}
