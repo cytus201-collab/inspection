@@ -1844,6 +1844,11 @@
       /* 句號後緊接「二、」等項次時斷行；去掉印章殘字（短行、含公司／印／章、無標點） */
       db = db.join('\n').replace(/。\s*([一二三四五六七八九十]+、)/g, '。\n$1').split('\n').filter(function (x) { var y = j(x); return y && !(y.length <= 8 && /公司|印|章/.test(y) && !/[，。,]/.test(y)); });
       db.forEach(function (x) { var y = j(x); if (/^([一二三四五六七八九十]+、|[（(][一二三四五六七八九十\d]+[）)]|\d+[.、])/.test(y) || !items.length) items.push(y); else items[items.length - 1] += y; });
+      /* 主旨沒以句號結束、說明第一段又不是項次：多半是主旨被辨識排到「說明」之後，把句號前的文字接回主旨 */
+      if (o.subj && !/。$/.test(o.subj) && items.length && !/^([一二三四五六七八九十]+、|[（(])/.test(items[0])) {
+        var cut = items[0].indexOf('。');
+        if (cut >= 0) { o.subj += items[0].slice(0, cut + 1); items[0] = items[0].slice(cut + 1); if (!items[0]) items.shift(); }
+      }
       o.desc = items.join('\n');
     }
     if (o.kind === 'meet' || /開會事由|開會時間/.test(all)) {
