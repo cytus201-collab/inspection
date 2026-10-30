@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=67">
+<link rel="stylesheet" href="style.css?v=68">
 </head>
 <body>
 
@@ -355,6 +355,7 @@
 <!-- ===== 施工抽查（工項目錄） ===== -->
 <main id="vWorks" class="view wrap wide" hidden>
     <section aria-labelledby="h-works">
+      <div class="btn-row zip-acts"><button type="button" class="btn" id="btnZip">依日期下載（壓縮檔）</button></div>
       <h2 class="h" id="h-works">工項目錄</h2>
       <details class="work-pick" id="workPickBox">
         <summary>選擇本工程要抽查的工項</summary>
@@ -605,6 +606,30 @@
     </div>
   </div>
 </div>
+<div class="dialog" id="zipDlg" hidden>
+  <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="zipTitle">
+    <h2 id="zipTitle">依日期下載抽查表</h2>
+    <div class="zip-dates">
+      <label class="f">開始日期<input type="date" id="zipFrom"></label>
+      <label class="f">結束日期<input type="date" id="zipTo"></label>
+    </div>
+    <div class="chips"><button type="button" class="chip" data-zq="m0">本月</button><button type="button" class="chip" data-zq="m1">上月</button></div>
+    <div class="zip-checks"><span class="zip-lb">類別</span>
+      <label class="chk"><input type="checkbox" id="zipWork" checked><span>施工抽查</span></label>
+      <label class="chk"><input type="checkbox" id="zipMat" checked><span>材料抽查</span></label></div>
+    <div class="zip-checks"><span class="zip-lb">內容</span>
+      <label class="chk"><input type="checkbox" data-zp="form" checked><span>表單</span></label>
+      <label class="chk"><input type="checkbox" data-zp="photo" checked><span>照片</span></label>
+      <label class="chk"><input type="checkbox" data-zp="dwg" checked><span>位置圖</span></label></div>
+    <p id="zipCount"></p>
+    <p id="zipMsg" class="zip-msg"></p>
+    <div class="btn-row end">
+      <button type="button" class="btn ghost" id="zipNo">取消</button>
+      <button type="button" class="btn primary" id="zipGo">下載壓縮檔</button>
+    </div>
+  </div>
+</div>
+
 <div class="dialog" id="dlg" hidden>
   <div class="dialog-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
     <h2 id="dlgTitle"></h2>
@@ -616,9 +641,9 @@
   </div>
 </div>
 
-<script src="data.js?v=67"></script>
-<script src="mat-parse.js?v=67"></script>
-<script src="cloud.js?v=67"></script>
-<script src="app.js?v=67"></script>
+<script src="data.js?v=68"></script>
+<script src="mat-parse.js?v=68"></script>
+<script src="cloud.js?v=68"></script>
+<script src="app.js?v=68"></script>
 </body>
 </html>

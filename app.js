@@ -10,7 +10,8 @@
     pdfCmaps: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
     xlsx: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
     h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-    jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+    jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    jszip: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
   };
   var $ = function (id) { return document.getElementById(id); };
   var WORK = {}; D.works.forEach(function (w) { WORK[w.id] = w; });
@@ -1196,13 +1197,16 @@
     fillImgs(paper);
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
-    var dt = roc(r.checkDate || today(), '.'), mm = w.kind === 'matform' && matById(p, r.mid);
     var only = PARTS.form ? '' : PARTS.photo && !PARTS.dwg ? '_照片' : PARTS.dwg && !PARTS.photo ? '_位置圖' : '_照片及位置圖';
     if (w.kind === 'photo') only = '';
     if (multi) {
       var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = roc(ds[0] || today(), '.'), d2 = roc(ds[ds.length - 1] || today(), '.');
       setDocName(w.name + '抽查_' + d1 + (d2 !== d1 ? '-' + d2 : '') + only);
-    } else setDocName((w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查_' + dt : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') + '_' + dt : w.name + '_' + dt) + only);
+    } else setDocName(recFileName(p, w, r) + only);
+  }
+  function recFileName(p, w, r) {
+    var dt = roc(r.checkDate || today(), '.'), mm = w.kind === 'matform' && matById(p, r.mid);
+    return w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查_' + dt : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') + '_' + dt : w.name + '_' + dt;
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
   $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; PARTS[x.dataset.part] = x.checked; renderPreview(); });
@@ -1228,15 +1232,16 @@
     }).catch(function (err) { $('pdfMsg').textContent = (err && err.message) || 'PDF 產生失敗，請改用「列印」再選「另存為 PDF」。'; })
       .then(function () { btn.disabled = false; btn.textContent = label; });
   });
-  function makePdf() {
+  function makePdf(srcEl) {
+    srcEl = srcEl && srcEl.nodeType === 1 ? srcEl : $('paper');
     /* 公文：確定標楷體與 Times 已載入才轉成圖片 */
-    if (($('paper').classList.contains('gw-paper') || $('paper').classList.contains('dr-paper')) && document.fonts && document.fonts.load) {
-      return Promise.all([document.fonts.load('16pt "GW Kai"', '測'), document.fonts.load('16pt "GW Times"', 'A1')]).catch(function () {}).then(makePdf2);
+    if ((srcEl.classList.contains('gw-paper') || srcEl.classList.contains('dr-paper')) && document.fonts && document.fonts.load) {
+      return Promise.all([document.fonts.load('16pt "GW Kai"', '測'), document.fonts.load('16pt "GW Times"', 'A1')]).catch(function () {}).then(function () { return makePdf2(srcEl); });
     }
-    return makePdf2();
+    return makePdf2(srcEl);
   }
-  function makePdf2() {
-    var src = $('paper'), land = src.classList.contains('landscape');
+  function makePdf2(srcEl) {
+    var src = srcEl || $('paper'), land = src.classList.contains('landscape');
     var Wmm = land ? 297 : 210, Hmm = land ? 210 : 297, mx = land ? 8 : 10, my = 8;
     var host = document.createElement('div'); host.className = 'pdf-host'; document.body.appendChild(host);
     /* 依頁拆開：表單本體一頁、照片頁與位置圖各一頁 */
@@ -3002,6 +3007,97 @@
     }).join('');
     fillImgs($('phGrid'));
   }
+  /* 依日期下載：範圍內的施工、材料抽查表，一張一個 PDF，打包成壓縮檔 */
+  function zipRange() { return { from: $('zipFrom').value, to: $('zipTo').value }; }
+  function zipList(p) {
+    var g = zipRange(), out = [];
+    if (!g.from || !g.to) return out;
+    Object.keys(p.recs || {}).forEach(function (wid) {
+      var w = WORK[wid]; if (!w) return;
+      var mat = w.kind === 'matform';
+      if (mat ? !$('zipMat').checked : !$('zipWork').checked) return;
+      (p.recs[wid] || []).forEach(function (r) {
+        if (r.draft || !r.checkDate || r.checkDate < g.from || r.checkDate > g.to) return;
+        out.push({ w: w, r: r, mat: mat });
+      });
+    });
+    return out.sort(function (a, b) { return a.r.checkDate.localeCompare(b.r.checkDate) || (a.w.name || '').localeCompare(b.w.name || '') || (a.r.phase || 0) - (b.r.phase || 0) || (a.r.seq || 0) - (b.r.seq || 0); });
+  }
+  function zipCount() {
+    var p = proj(cur.pid), g = zipRange(), okDate = g.from && g.to && g.from <= g.to, L = okDate ? zipList(p) : [], m = L.filter(function (x) { return x.mat; }).length;
+    $('zipCount').textContent = !okDate ? '請選擇開始與結束日期（開始不可晚於結束）。' : '範圍內共 ' + L.length + ' 張：施工 ' + (L.length - m) + '、材料 ' + m + '（草稿不含）';
+    return L;
+  }
+  function ymRange(off) {
+    var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - off);
+    var y = d.getFullYear(), m = d.getMonth(), pad = function (n) { return ('0' + n).slice(-2); };
+    return [y + '-' + pad(m + 1) + '-01', y + '-' + pad(m + 1) + '-' + pad(new Date(y, m + 1, 0).getDate())];
+  }
+  function rocDot(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : ''; }
+  var zipBusy = false;
+  $('btnZip').addEventListener('click', function () {
+    var a = ymRange(0); $('zipFrom').value = a[0]; $('zipTo').value = a[1];
+    $('zipMsg').textContent = ''; $('zipGo').disabled = false; $('zipNo').textContent = '取消';
+    zipCount(); $('zipDlg').hidden = false;
+  });
+  $('zipDlg').addEventListener('click', function (e) { var b = e.target.closest('[data-zq]'); if (!b || zipBusy) return; var a = ymRange(b.dataset.zq === 'm1' ? 1 : 0); $('zipFrom').value = a[0]; $('zipTo').value = a[1]; zipCount(); });
+  $('zipDlg').addEventListener('change', function () { if (!zipBusy) zipCount(); });
+  $('zipNo').addEventListener('click', function () { if (zipBusy) { zipBusy = 'stop'; $('zipMsg').textContent = '正在停止…'; return; } $('zipDlg').hidden = true; });
+  function imgsReady(root) {
+    return Promise.all(Array.prototype.map.call(root.querySelectorAll('img[data-img]'), function (img) {
+      return loadImg(img.dataset.img).then(function (u) {
+        if (!u) { var m = document.createElement('span'); m.className = 'ph-miss'; m.textContent = '這張照片無法取得（尚未上傳到雲端或不在這台裝置）'; img.replaceWith(m); return; }
+        return new Promise(function (res) { img.onload = img.onerror = function () { res(); }; img.src = u; if (img.complete && img.naturalWidth) res(); });
+      });
+    }));
+  }
+  $('zipGo').addEventListener('click', function () {
+    if (zipBusy) return;
+    var p = proj(cur.pid), L = zipCount(), g = zipRange(), want = {};
+    document.querySelectorAll('[data-zp]').forEach(function (x) { want[x.dataset.zp] = x.checked; });
+    if (!L.length) { $('zipMsg').textContent = '這個範圍沒有可下載的抽查表。'; return; }
+    if (!want.form && !want.photo && !want.dwg) { $('zipMsg').textContent = '「內容」至少勾選一項。'; return; }
+    var keep = { form: PARTS.form, photo: PARTS.photo, dwg: PARTS.dwg }, keepOut = outTarget;
+    zipBusy = true; $('zipGo').disabled = true; $('zipNo').textContent = '停止';
+    var only = want.form ? '' : want.photo && !want.dwg ? '_照片' : want.dwg && !want.photo ? '_位置圖' : '_照片及位置圖';
+    var used = {}, done = 0, skipped = 0, zip;
+    var src = document.createElement('div');
+    src.style.cssText = 'position:absolute;left:-10000px;top:0;width:210mm;visibility:hidden';
+    document.body.appendChild(src);
+    var libs = (window.html2canvas ? Promise.resolve() : loadScript(CDN.h2c)).then(function () { return window.jspdf ? null : loadScript(CDN.jspdf); }).then(function () { return window.JSZip ? null : loadScript(CDN.jszip); });
+    libs.then(function () {
+      zip = new window.JSZip();
+      PARTS.form = want.form; PARTS.photo = want.photo; PARTS.dwg = want.dwg;
+      return L.reduce(function (pr, it, i) {
+        return pr.then(function () {
+          if (zipBusy === 'stop') throw new Error('stop');
+          $('zipMsg').textContent = '產生中：' + (i + 1) + ' / ' + L.length;
+          var html = recPaper(p, it.w, it.r, true);
+          if (!html.replace(/<[^>]+>/g, '').trim() && html.indexOf('<img') < 0) { skipped++; return; }
+          src.className = 'paper'; src.innerHTML = html; fitForms(src);
+          return imgsReady(src).then(function () { return makePdf(src); }).then(function (blob) {
+            var dir = it.mat ? '材料抽查/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
+            while (used[dir + name]) name = base + '_' + n++;
+            used[dir + name] = 1; zip.file(dir + name + '.pdf', blob); done++;
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      if (!done) throw new Error('所選範圍沒有可輸出的內容（例如勾了照片，但這些表都沒有照片）');
+      $('zipMsg').textContent = '壓縮中…';
+      return zip.generateAsync({ type: 'blob' });
+    }).then(function (blob) {
+      var nm = '抽查表_' + rocDot(g.from) + '-' + rocDot(g.to) + '.zip';
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nm; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+      $('zipMsg').textContent = '已下載「' + nm + '」，共 ' + done + ' 個 PDF' + (skipped ? '（' + skipped + ' 張沒有所選內容，已略過）' : '') + '。';
+    }).catch(function (err) {
+      $('zipMsg').textContent = err && err.message === 'stop' ? '已停止，未下載。' : '產生失敗：' + ((err && err.message) || '請稍後再試');
+    }).then(function () {
+      PARTS.form = keep.form; PARTS.photo = keep.photo; PARTS.dwg = keep.dwg; outTarget = keepOut;
+      src.remove(); zipBusy = false; $('zipGo').disabled = false; $('zipNo').textContent = '關閉';
+    });
+  });
   function fillImgs(root) {
     root.querySelectorAll('img[data-img]').forEach(function (img) {
       loadImg(img.dataset.img).then(function (u) {
