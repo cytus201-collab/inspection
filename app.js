@@ -1200,13 +1200,15 @@
     var only = PARTS.form ? '' : PARTS.photo && !PARTS.dwg ? '_照片' : PARTS.dwg && !PARTS.photo ? '_位置圖' : '_照片及位置圖';
     if (w.kind === 'photo') only = '';
     if (multi) {
-      var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = roc(ds[0] || today(), '.'), d2 = roc(ds[ds.length - 1] || today(), '.');
-      setDocName(w.name + '抽查_' + d1 + (d2 !== d1 ? '-' + d2 : '') + only);
+      var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = rocNum(ds[0] || today()), d2 = rocNum(ds[ds.length - 1] || today());
+      setDocName(d1 + (d2 !== d1 ? '-' + d2 : '') + '_' + w.name + '抽查' + only);
     } else setDocName(recFileName(p, w, r) + only);
   }
+  /* 檔名：民國日期在前，例 1151010_天花板工程(明架)施工中抽查 */
+  function rocNum(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + a[1] + a[2] : ''; }
   function recFileName(p, w, r) {
-    var dt = roc(r.checkDate || today(), '.'), mm = w.kind === 'matform' && matById(p, r.mid);
-    return w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查_' + dt : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') + '_' + dt : w.name + '_' + dt;
+    var dt = rocNum(r.checkDate || today()), mm = w.kind === 'matform' && matById(p, r.mid);
+    return dt + '_' + (w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') : w.name);
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
   $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; PARTS[x.dataset.part] = x.checked; renderPreview(); });
@@ -3033,7 +3035,6 @@
     var y = d.getFullYear(), m = d.getMonth(), pad = function (n) { return ('0' + n).slice(-2); };
     return [y + '-' + pad(m + 1) + '-01', y + '-' + pad(m + 1) + '-' + pad(new Date(y, m + 1, 0).getDate())];
   }
-  function rocDot(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + '.' + a[1] + a[2] : ''; }
   var zipBusy = false;
   $('btnZip').addEventListener('click', function () {
     var a = ymRange(0); $('zipFrom').value = a[0]; $('zipTo').value = a[1];
@@ -3087,7 +3088,7 @@
       $('zipMsg').textContent = '壓縮中…';
       return zip.generateAsync({ type: 'blob' });
     }).then(function (blob) {
-      var nm = '抽查表_' + rocDot(g.from) + '-' + rocDot(g.to) + '.zip';
+      var nm = rocNum(g.from) + '-' + rocNum(g.to) + '_抽查表.zip';
       var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nm; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
       $('zipMsg').textContent = '已下載「' + nm + '」，共 ' + done + ' 個 PDF' + (skipped ? '（' + skipped + ' 張沒有所選內容，已略過）' : '') + '。';
