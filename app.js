@@ -1137,6 +1137,14 @@
     });
   });
 
+  /* 回去填寫：捲到第一個未判定的項目並閃一下 */
+  function gotoItem(sel) {
+    var el = sel && document.querySelector('#vForm ' + sel); if (!el) return;
+    var d = el.closest('details'); if (d) d.open = true;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    setTimeout(function () { el.classList.remove('flash'); }, 2400);
+  }
   $('btnConfirm').addEventListener('click', function () {
     var w = W(), r = R(), miss = [];
     if (w.kind === 'photo') {
@@ -1147,23 +1155,26 @@
     var toPreview = function () {
       delete r.draft; if (hasStd(w) && !r.snap) r.snap = snapOf(w, r); save();
       if (!isFix(w) && !r.result) { r.result = stats(w, r).ng ? 'ng' : 'ok'; save(); }
+      if (w.kind === 'matform' && r.hand && !stats(w, r).ng) { var m0 = matById(proj(cur.pid), r.mid); if (m0) { m0.inspDate = r.checkDate || today(); save(); } go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return; }
       if (w.kind === 'matform') { var m = matById(proj(cur.pid), r.mid); if (m) { m.inspDate = r.checkDate || today(); m.inspResult = stats(w, r).ng ? 'ng' : 'ok'; save(); } }
       go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid });
     };
     if (w.kind === 'irregular') {
+      var firstRow = -1;
       if (!r.rows.length) { ask('尚未加入抽驗項目', '請先加入至少一個抽驗項目。', '好', '回去填寫', function () {}); return; }
-      r.rows.forEach(function (x) { if (!x.r) miss.push(x.name || '自訂項目'); });
+      r.rows.forEach(function (x, i) { if (!x.r) { miss.push(x.name || '自訂項目'); if (firstRow < 0) firstRow = i; } });
       if (!miss.length) return toPreview();
       return ask('還有 ' + miss.length + ' 項未判定', miss.slice(0, 5).join('、') + '。', '回去填寫', '未判定的標為「／」並繼續', function () {
-        r.rows.forEach(function (x) { if (!x.r) x.r = 'na'; }); save(); toPreview();
-      });
+        r.rows.forEach(function (x) { if (!x.r) x.r = 'na'; }); delete r.hand; save(); toPreview();
+      }, '未判定的留白（印出手填）', function () { r.hand = true; save(); toPreview(); }, function () { gotoItem('[data-row="' + firstRow + '"]'); });
     }
-    effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (!it.c.r) miss.push(it.name || '自訂項目'); }); });
-    if (!miss.length) return toPreview();
+    var first = null;
+    effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (!it.c.r) { miss.push(it.name || '自訂項目'); if (!first) first = it.custom ? '[data-x="' + it.x + '"]' : '[data-key="' + it.key + '"]'; } }); });
+    if (!miss.length) { delete r.hand; return toPreview(); }
     ask('還有 ' + miss.length + ' 項未判定', miss.slice(0, 5).join('、') + (miss.length > 5 ? ' 等' : '') + '。', '回去填寫', '未判定的標為「／」並繼續', function () {
       effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) { if (!it.c.r) { if (it.custom) it.c.r = 'na'; else cell(r, it.key).r = 'na'; } }); });
-      save(); toPreview();
-    });
+      delete r.hand; save(); toPreview();
+    }, '未判定的留白（印出手填）', function () { r.hand = true; save(); toPreview(); }, function () { gotoItem(first); });
   });
 
   /* ========== 預覽列印 ========== */
@@ -1191,7 +1202,7 @@
     var paper = $('paper'); paper.className = 'paper';
     var html = batch.map(function (x, i) { return recPaper(p, w, x, i === 0); }).join('').replace(/^<section class="rec-sec">/, '<section>');
     paper.innerHTML = html || '<p class="pv-empty">所選的內容沒有可輸出的頁面（例如這幾張沒有照片或位置標記）。</p>';
-    fitForms(paper);
+    fitForms(paper); fitPlan(paper);
     if (!multi) bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
     $('outAt').closest('.out-at').hidden = multi;
     fillImgs(paper);
@@ -1243,7 +1254,12 @@
     return makePdf2(srcEl);
   }
   function makePdf2(srcEl) {
-    var src = srcEl || $('paper'), land = src.classList.contains('landscape');
+    var s0 = srcEl || $('paper');
+    if (s0.querySelector('.pf') && document.fonts && document.fonts.load && !s0._fontOK) {
+      return Promise.all([document.fonts.load('300 11pt "Noto Sans TC"', s0.textContent.slice(0, 4000)), document.fonts.load('bold 12pt "GW Kai"', '表')]).catch(function () {})
+        .then(function () { return document.fonts.ready; }).then(function () { s0._fontOK = true; return makePdf2(s0); }).then(function (b) { s0._fontOK = false; return b; });
+    }
+    var src = s0, land = src.classList.contains('landscape');
     var Wmm = land ? 297 : 210, Hmm = land ? 210 : 297, mx = land ? 8 : 10, my = 8;
     var host = document.createElement('div'); host.className = 'pdf-host'; document.body.appendChild(host);
     /* 依頁拆開：表單本體一頁、照片頁與位置圖各一頁 */
@@ -1289,7 +1305,7 @@
   function fmtOut(v) { var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v || ''); return m ? (+m[1]) + '/' + (+m[2]) + '/' + (+m[3]) + ' ' + m[4] + ':' + m[5] : ''; }
   var outTarget = null;   // { obj, key, def }
   function outValue() { return (outTarget && outTarget.obj[outTarget.key]) || (outTarget && outTarget.def ? outTarget.def() : nowLocal()); }
-  function foot() { return '<div class="foot"><span></span><span class="foot-out">產出 ' + fmtOut(outValue()) + '</span></div>'; }
+  function foot() { return ''; }   /* 依主管意見：不印產出時間 */
   function bindOut(obj, key, def) {
     outTarget = { obj: obj, key: key, def: def }; $('outAt').value = outValue();
     $('btnOutNow').textContent = def ? '改回檢查日期' : '改為現在';
@@ -1322,40 +1338,86 @@
     return body;
   }
   var PAD = { phased: 36, matform: 32, safety: 0, irregular: 12 };
+  /* 監造計畫附錄B 施工抽查紀錄表格式（消防工程表之欄位配置：分類合併欄＋管理項目）
+     標題標楷體粗體12pt；表內黑體細11pt；框線0.5pt黑；版面上下1.5cm、左2cm、右1.5cm */
+  var PF_COLS = '<colgroup><col style="width:18.14%"><col style="width:20%"><col style="width:27.59%"><col style="width:2.85%"><col style="width:15.35%"><col style="width:8.08%"><col style="width:7.99%"></colgroup>';
+  var PF_NOTES = ['1.檢查標準及實際檢查情形應具體明確或量化尺寸。', '2.查驗結果合格者註明「○」，不合格者註明「╳」，如無需查驗之項目則打「/」。', '3.嚴重缺失、缺失未完成改善，應填具「施工品質缺失處理改善暨追蹤紀錄表」追蹤改善。', '4.本表由工地現場監造人員實地檢查後覈實記載簽認。'];
+  function pfFlowName(i) { return ['施工前', '施工中檢查', '施工完成檢查'][i]; }
   function paperPhased(p, w, r) {
-    var I = p.info;
-    var flow = PH_SHORT.map(function (_, i) { return '<span class="opt">' + box(i === r.phase) + flowName(i) + '</span>'; }).join('');
-    var body = tableBody(effGroups(w, r), PAD.phased);
-    var on = r.fix !== 'none';
-    var fixTxt = box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善';
-    return '<h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表(' + (r.phase + 1) + ')') + '</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
-      headTable(I.name, w.name, r) +
-      '<tr><td>施工流程</td><td colspan="3">' + flow + '</td></tr>' +
-      '<tr><td>檢查結果</td><td colspan="3"><span class="opt">○檢查合格</span><span class="opt">╳有缺失需改正</span><span class="opt">／無此檢查項目</span></td></tr></table>' +
-      '<table style="border-top:0"><colgroup><col style="width:20%"><col style="width:40%"><col style="width:29%"><col style="width:11%"></colgroup>' +
-      '<thead><tr><th style="border-top:0">管理項目</th><th style="border-top:0">抽查標準（定性定量）</th><th style="border-top:0">實際抽查情形（敘述抽查值）</th><th style="border-top:0">抽查結果</th></tr></thead><tbody>' + body +
-      '<tr><td colspan="4" style="line-height:1.7">缺失複查結果：<br>' + fixTxt + '<br>複查日期：' + (on && roc(r.fixDate) || '　　年　　月　　日') +
-      '　　複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '') + '</td></tr>' +
-      '<tr><td colspan="4" class="notes"><ol>' + D.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ol></td></tr>' +
-      '<tr><td colspan="4" class="sig">監造工地負責（授權）人/監造現場人員簽名：' + esc(I.inspector) + ' ' + sigImg(r, 'sigInspector') + '</td></tr></tbody></table>' + foot();
+    var I = p.info, on = r.fix !== 'none', sp = '　　　　　';
+    var flow = [0, 1, 2].map(function (i) { return box(i === r.phase) + pfFlowName(i); }).join(sp);
+    var body = '';
+    effGroups(w, r).forEach(function (g) {
+      if (!g.items.length) return;
+      g.items.forEach(function (it, k) {
+        body += '<tr class="it">' + (k ? '' : '<td rowspan="' + g.items.length + '">' + esc(g.name) + '</td>') + '<td>' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td colspan="3">' + esc(it.c.note) + '</td><td class="res">' + (SYM[it.c.r] || '') + '</td></tr>';
+      });
+    });
+    var fix = '缺失複查結果：<br>' + box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善<br>複查日期：' + (on && roc(r.fixDate) || '　　　年　　月　　日') + '<br>複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '');
+    return '<div class="pf pf-fit"><h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表 (' + (r.phase + 1) + ')') + '</h3><p class="no">編號：</p>' +
+      '<table>' + PF_COLS +
+      '<tr style="height:7.7mm"><td>工程名稱</td><td colspan="6">' + esc(I.name) + '</td></tr>' +
+      '<tr style="height:11mm"><td>分項工程名稱</td><td colspan="6">' + esc(w.name) + '</td></tr>' +
+      '<tr style="height:11mm"><td>檢查位置</td><td colspan="3">' + esc(r.location) + '</td><td>檢查日期</td><td colspan="2">' + roc(r.checkDate, '.') + '</td></tr>' +
+      '<tr style="height:5.6mm"><td>施工流程</td><td colspan="6">' + flow + '</td></tr>' +
+      '<tr style="height:7.1mm"><td>檢查結果</td><td colspan="6">○檢查合格' + sp + '╳有缺失需改正' + sp + '／無此檢查項目</td></tr></table>' +
+      '<table class="pf-items" style="border-top:0">' + PF_COLS +
+      '<thead><tr style="height:11mm"><td colspan="2">管理項目</td><td>抽查標準（定性定量）</td><td colspan="3">實際抽查情形<br>（敘述抽查值）</td><td>抽查結果</td></tr></thead><tbody>' + body + '</tbody></table>' +
+      '<div class="pf-tail"><table style="border-top:0">' + PF_COLS +
+      '<tr style="height:26mm"><td colspan="7" class="pf-fix">' + fix + '</td></tr>' +
+      '<tr style="height:24mm"><td colspan="7">' + PF_NOTES.join('<br>') + '</td></tr></table>' +
+      '<p class="pf-sig">監造工地負責（授權）人/監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigImg(r, 'sigInspector') + '</p></div></div>';
   }
+  /* 監造計畫 表5-3 材料設備品質抽驗紀錄表（全表標楷體10pt；上0.8cm、左右1.9cm、下2.54cm） */
+  var MT_RES = { ok: '合格', ng: '不合格', na: '／' };
   function paperMat(p, w, r) {
-    var I = p.info, m = matById(p, r.mid) || { name: '', no: '', qty: '' }, on = r.fix !== 'none';
-    var fixTxt = box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善';
-    return '<h3>材料進場抽查紀錄表</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
-      '<table><colgroup><col style="width:18%"><col style="width:42%"><col style="width:15%"><col style="width:25%"></colgroup>' +
-      '<tr><td>工程名稱</td><td colspan="3">' + esc(I.name) + '</td></tr>' +
-      '<tr><td>材料／設備名稱</td><td colspan="3">' + esc(m.name) + '</td></tr>' +
-      '<tr><td>契約詳細表項次</td><td>' + esc(m.no) + '</td><td>契約數量</td><td>' + esc(m.qty) + '</td></tr>' +
-      '<tr><td>檢查位置</td><td>' + esc(r.location) + '</td><td>檢查日期</td><td>' + roc(r.checkDate, '.') + '</td></tr>' +
-      '<tr><td>檢查結果</td><td colspan="3"><span class="opt">○檢查合格</span><span class="opt">╳有缺失需改正</span><span class="opt">／無此檢查項目</span></td></tr></table>' +
-      '<table style="border-top:0"><colgroup><col style="width:20%"><col style="width:40%"><col style="width:29%"><col style="width:11%"></colgroup>' +
-      '<thead><tr><th style="border-top:0">管理項目</th><th style="border-top:0">抽查標準（定性定量）</th><th style="border-top:0">實際抽查情形（敘述抽查值）</th><th style="border-top:0">抽查結果</th></tr></thead><tbody>' +
-      tableBody(effGroups(w, r), PAD.matform) +
-      '<tr><td colspan="4" style="line-height:1.7">缺失複查結果：<br>' + fixTxt + '<br>複查日期：' + (on && roc(r.fixDate) || '　　年　　月　　日') +
-      '　　複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '') + '</td></tr>' +
-      '<tr><td colspan="4" class="notes"><ol>' + D.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ol></td></tr>' +
-      '<tr><td colspan="4" class="sig">監造工地負責（授權）人/監造現場人員簽名：' + esc(I.inspector) + ' ' + sigImg(r, 'sigInspector') + '</td></tr></tbody></table>' + foot();
+    var I = p.info, m = matById(p, r.mid) || { name: '' }, cols = '<colgroup><col style="width:19.52%"><col style="width:29.79%"><col style="width:13.35%"><col style="width:17.46%"><col style="width:19.88%"></colgroup>';
+    var body = '';
+    effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) {
+      body += '<tr class="it"><td class="c">' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td></td><td>' + esc(it.c.note) + '</td><td class="res">' + (MT_RES[it.c.r] || '') + '</td></tr>';
+    }); });
+    return '<div class="pf pf-mat pf-fit"><h3>材料設備品質抽驗紀錄表</h3><p class="no">編號：</p>' +
+      '<table>' + cols +
+      '<tr style="height:10mm"><td class="c">工程名稱</td><td colspan="4">' + esc(I.name) + '</td></tr>' +
+      '<tr style="height:10mm"><td class="c">材料/設備名稱</td><td>' + esc(m.name) + '</td><td>檢查日期</td><td colspan="2">' + (r.checkDate ? roc(r.checkDate) : '　　年　　月　　日') + '</td></tr></table>' +
+      '<table class="pf-items" style="border-top:0">' + cols +
+      '<thead><tr style="height:10mm"><td class="c">抽驗項目</td><td>抽驗標準</td><td>抽驗數量</td><td>抽驗值</td><td>抽驗結果</td></tr></thead><tbody>' + body + '</tbody></table>' +
+      '<div class="pf-tail"><table style="border-top:0">' + cols +
+      '<tr><td class="c">說明</td><td colspan="4">1.『抽驗結果』為抽驗值與抽驗標準之比較，填寫『合格』、『不合格』。<br>2.抽驗標準應依表5-8材料設備抽驗管理標準表及核定之送審資料填寫。<br>3.抽驗不合格則登錄至「材料設備檢（試）驗管制總表」(表5-7)第○項進行追蹤改善。</td></tr></table>' +
+      '<p class="pf-sig">監造工地負責（授權）人：' + esc(I.inspector || '') + '　　　　　　監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigImg(r, 'sigInspector') + '</p></div></div>';
+  }
+  /* 一張 A4：不足補空白列；超出先縮字（施工表最小10pt、材料表最小9.5pt），仍超出則自然換頁 */
+  function fitPlan(paper) {
+    var forms = paper.querySelectorAll('.pf-fit'); if (!forms.length) return;
+    var mm = 96 / 25.4;
+    var host = document.createElement('div'); host.className = 'paper';
+    host.style.cssText = 'position:absolute;left:-10000px;top:0;width:190mm;max-width:none;padding:0;border:0;margin:0;visibility:hidden';
+    document.body.appendChild(host);
+    forms.forEach(function (f) {
+      var mat = f.classList.contains('pf-mat'), target = (mat ? 262 : 266) * mm, sizes = mat ? [10, 9.5] : [11, 10.5, 10];
+      var c = f.cloneNode(true); host.innerHTML = ''; host.appendChild(c);
+      var h = function () { return c.getBoundingClientRect().height + parseFloat(getComputedStyle(c).marginTop || 0); };
+      var fs = sizes[0];
+      for (var i = 0; i < sizes.length; i++) { fs = sizes[i]; c.style.fontSize = fs + 'pt'; if (h() <= target) break; }
+      f.style.fontSize = fs + 'pt';
+      if (h() > target) {
+        /* 最小字級仍放不下：缺失複查、注意事項與簽名整段移到下一頁，第一頁留給抽查項目 */
+        var tail = f.querySelector('.pf-tail'), sec = document.createElement('section'), w2 = document.createElement('div');
+        sec.className = 'rec-sec'; w2.className = f.className.replace('pf-fit', '').trim(); w2.style.fontSize = fs + 'pt';
+        w2.appendChild(tail); sec.appendChild(w2);
+        var anchor = f; while (anchor.parentNode && anchor.parentNode !== paper) anchor = anchor.parentNode;
+        anchor.parentNode.insertBefore(sec, anchor.nextSibling);
+        c.querySelector('.pf-tail').remove();
+        if (h() > target) return;
+      }
+      var tb = c.querySelector('.pf-items tbody'), rtb = f.querySelector('.pf-items tbody');
+      var cols = mat ? '<td></td><td></td><td></td><td></td><td></td>' : '<td></td><td></td><td></td><td colspan="3"></td><td></td>';
+      var mk = function () { var tr = document.createElement('tr'); tr.className = 'blank' + (mat ? ' mb' : ''); tr.innerHTML = cols; return tr; };
+      var n = 0;
+      while (n < 60) { var tr = mk(); tb.appendChild(tr); if (h() > target) { tr.remove(); break; } n++; }
+      for (var k = 0; k < n; k++) rtb.appendChild(mk());
+    });
+    host.remove();
   }
   function headTable(projName, subName, r) {
     return '<table><colgroup><col style="width:18%"><col style="width:42%"><col style="width:15%"><col style="width:25%"></colgroup>' +
@@ -1400,7 +1462,7 @@
     }
     inner += '</table>';
     var ng = r.result === 'ng';
-    return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：' + esc(r.docNo) + '</p>' +
+    return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：</p>' +
       headTable(I.name, '', r) + '</table>' +
       '<table style="border-top:0" class="single"><tbody>' +
       '<tr><td>一、抽驗說明：<br>' + notes.map(function (n, i) { return '(' + '一二三四'[i] + ')' + esc(n); }).join('<br>') + '</td></tr>' +
@@ -2816,6 +2878,7 @@
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft || !r.checkDate || r.checkDate > to) return;
         var m = w.kind === 'matform' && matById(p, r.mid), st = recState(w, r), single = !isFix(w);
+        if (r.hand && st !== 'ng' && st !== 'fixed') st = 'hand';
         if (w.kind === 'matform') usedMat[r.mid] = 1;
         var row = { date: r.checkDate, no: r.docNo || '', name: w.kind === 'matform' ? (m ? m.name : '材料') + '進場抽查' : w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name, loc: r.location || '', st: st };
         (w.kind === 'matform' ? mats : cons).push(row);
@@ -2933,7 +2996,7 @@
       if (kind === 'ng') renderNgPrint(p, to, d); else renderTrackPrint(p, to, d);
       return;
     }
-    var RES = { ok: 'OK', ng: '<b class="sum-ng">有缺失</b>', fixed: '缺失已改善', todo: '未完成' };
+    var RES = { ok: 'OK', ng: '<b class="sum-ng">有缺失</b>', fixed: '缺失已改善', todo: '未完成', hand: '' };
     var cnt = function (list) { var pre = list.filter(function (x) { return x.date < from; }).length; return { pre: pre, now: list.length - pre, all: list.length }; };
     var head = function (c) { return '<p class="sum-cnt">前期累計：<b>' + c.pre + '</b> 次　　本期：<b>' + c.now + '</b> 次　　本期累計：<b>' + c.all + '</b> 次'; };
     var tbl = function (list, cols, cell) {
@@ -3075,7 +3138,7 @@
           $('zipMsg').textContent = '產生中：' + (i + 1) + ' / ' + L.length;
           var html = recPaper(p, it.w, it.r, true);
           if (!html.replace(/<[^>]+>/g, '').trim() && html.indexOf('<img') < 0) { skipped++; return; }
-          src.className = 'paper'; src.innerHTML = html; fitForms(src);
+          src.className = 'paper'; src.innerHTML = html; fitForms(src); fitPlan(src);
           return imgsReady(src).then(function () { return makePdf(src); }).then(function (blob) {
             var dir = it.mat ? '材料抽查/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
             while (used[dir + name]) name = base + '_' + n++;
@@ -3168,7 +3231,7 @@
       var pg = items.slice(i, i + 6), rows = '';
       for (var k2 = 0; k2 < 3; k2++) rows += '<tr>' + img(pg[k2 * 2]) + img(pg[k2 * 2 + 1]) + '</tr><tr>' + cap(pg[k2 * 2]) + cap(pg[k2 * 2 + 1]) + '</tr>';
       out += '<section class="ph-page"><h3>' + head + '</h3><table class="ph"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>' + rows + '</table>' +
-        '<div class="ph-pno">照片 ' + pn + ' / ' + Math.ceil(items.length / 6) + '　' + esc(r.docNo) + '</div></section>';
+        '<div class="ph-pno">照片 ' + pn + ' / ' + Math.ceil(items.length / 6) + '</div></section>';
     }
     return out;
   }
@@ -3880,7 +3943,7 @@
     dwgs(p).forEach(function (g) {
       var ms = g.marks.filter(function (m) { return m.rid === link; }); if (!ms.length) return;
       var num = function (m) { return ms.indexOf(m) + 1; };
-      out += '<section class="ph-page dw-page"><h3>抽查位置圖 ' + esc(r.docNo) + '</h3><p class="no">圖說：' + esc(g.name) + (r.location ? '　檢查位置：' + esc(r.location) : '') + '</p>' +
+      out += '<section class="ph-page dw-page"><h3>抽查位置圖</h3><p class="no">圖說：' + esc(g.name) + (r.location ? '　檢查位置：' + esc(r.location) : '') + '</p>' +
         dwFigure(g, ms, false, 30 + (ms.some(function (m) { return m.t; }) ? 8 + ms.length * 5.2 : 0), num) +
         (ms.some(function (m) { return m.t; }) ? dwLegend(p, ms, num) : '') + '</section>';
     });
@@ -4070,12 +4133,15 @@
 
   /* ---------- 對話框 ---------- */
   var dlgYesFn = null;
-  function ask(title, body, no, yes, fn) {
+  var dlgAltFn = null, dlgNoFn = null;
+  function ask(title, body, no, yes, fn, alt, altFn, noFn) {
     $('dlgTitle').textContent = title; $('dlgBody').textContent = body;
     $('dlgNo').textContent = no; $('dlgYes').textContent = yes; dlgYesFn = fn;
+    $('dlgAlt').hidden = !alt; $('dlgAlt').textContent = alt || ''; dlgAltFn = altFn || null; dlgNoFn = noFn || null;
     $('dlg').hidden = false; $('dlgNo').focus();
   }
-  $('dlgNo').addEventListener('click', function () { $('dlg').hidden = true; });
+  $('dlgNo').addEventListener('click', function () { $('dlg').hidden = true; if (dlgNoFn) { var f = dlgNoFn; dlgNoFn = null; setTimeout(f, 30); } });
+  $('dlgAlt').addEventListener('click', function () { $('dlg').hidden = true; if (dlgAltFn) dlgAltFn(); });
   $('dlgYes').addEventListener('click', function () { $('dlg').hidden = true; if (dlgYesFn) dlgYesFn(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('dlg').hidden) $('dlg').hidden = true; });
 
