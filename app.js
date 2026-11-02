@@ -85,6 +85,7 @@
     else saveMsg = lsOK ? '' : '裝置空間不足或瀏覽器禁止暫存，請匯出備份';
   }
   function save() {
+    codeCache = null;
     clearTimeout(saveTimer); saveTimer = setTimeout(writeLocal, 250);
     if (window.Cloud) window.Cloud.changed();
   }
@@ -114,6 +115,28 @@
   function proj(id) { return S.projects.filter(function (p) { return p.id === id; })[0]; }
   function recs(p, wid) { return p.recs[wid] || (p.recs[wid] = []); }
   function recById(p, wid, rid) { return recs(p, wid).filter(function (r) { return r.id === rid; })[0]; }
+  /* 文件分類編碼（監造計畫表8-1）：G 施工抽查、F 材料抽驗、L 施工照片、H 缺失追蹤；每個工程各自依日期（同日依建立順序）流水編號 */
+  var codeCache = null;
+  function codeCat(w) { return !w ? '' : w.kind === 'matform' ? 'F' : w.kind === 'photo' ? '' : 'G'; }
+  function codeKey(r) { return (r.checkDate || '9999') + '|' + ('000000000000000' + (r.created || 0)).slice(-15) + '|' + r.id; }
+  function codes(p) {
+    if (codeCache && codeCache.p === p) return codeCache.m;
+    var L = { G: [], F: [], L: [], H: [] };
+    Object.keys(p.recs || {}).forEach(function (wid) {
+      var w = WORK[wid]; if (!w) return;
+      (p.recs[wid] || []).forEach(function (r) {
+        if (r.draft) return;
+        var c = codeCat(w); if (c) L[c].push(r);
+        if ((r.photos || []).length) L.L.push(r);
+        if (w.kind !== 'photo') { var st = recState(w, r); if (st === 'ng' || st === 'fixed') L.H.push(r); }
+      });
+    });
+    var m = { G: {}, F: {}, L: {}, H: {} };
+    Object.keys(L).forEach(function (k) { L[k].sort(function (a, b) { return codeKey(a) < codeKey(b) ? -1 : 1; }).forEach(function (r, i) { m[k][r.id] = k + '-' + ('00' + (i + 1)).slice(-3); }); });
+    codeCache = { p: p, m: m }; return m;
+  }
+  function recCode(p, w, r) { var c = codeCat(w), m = codes(p); return c ? m[c][r.id] || '' : m.L[r.id] || ''; }
+  function dispNo(p, w, r) { return recCode(p, w, r) || (r.draft ? '確認後編號' : ''); }
   function matById(p, mid) { return p.mats.filter(function (m) { return m.id === mid; })[0]; }
   function cell(r, key) { return r.res[key] || (r.res[key] = { r: '', note: '' }); }
   function k(g, i) { return g + '-' + i; }
@@ -698,7 +721,7 @@
         var s = stats(w, r);
         var meta = [r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · ') || '尚未填寫位置與日期';
         var ck = batchSel ? '<span class="bsel' + (batchSel[r.id] ? ' on' : '') + '" aria-hidden="true">' + (batchSel[r.id] ? '✓' : '') + '</span>' : '';
-        return '<button type="button" class="rec' + (batchSel && batchSel[r.id] ? ' picked' : '') + '" data-rid="' + r.id + '">' + ck + '<span class="rb-main"><span class="rb-title">' + esc(r.docNo) +
+        return '<button type="button" class="rec' + (batchSel && batchSel[r.id] ? ' picked' : '') + '" data-rid="' + r.id + '">' + ck + '<span class="rb-main"><span class="rb-title">' + esc(dispNo(p, w, r)) +
           (s.ng ? '<span class="badge-ng">' + s.ng + ' 缺失</span>' : '') + '</span><span class="rb-meta">' + esc(meta) + '</span></span>' +
           '<span class="rb-right">' + s.d + '/' + s.t + '</span><span class="chev">›</span></button>';
       }).join('');
@@ -750,14 +773,15 @@
     $('autoLine').innerHTML = '自動帶入：工程名稱「' + esc(I.name || '未填') + '」' + (m ? ' · 材料「' + esc(m.name) + '」' : single ? '' : ' · 分項「' + esc(w.name) + '」') + ' · 監造人員「' + esc(I.inspector || '未填') + '」';
     if (!r.draft && hasStd(w) && snapStale(w, r)) $('autoLine').innerHTML += '<div class="draft-note std-note">本表沿用存檔當時（' + esc(r.snap.ver) + '）的抽查標準，與目前版本不同。<button type="button" class="link" id="btnSnapUpdate">更新為最新標準</button></div>';
     var prevR = r.draft && hasStd(w) && w.kind !== 'matform' ? recs(p, w.id).filter(function (x) { return x !== r && !x.draft && x.phase === r.phase; }).sort(function (a, b) { return (b.created || 0) - (a.created || 0); })[0] : null;
-    if (prevR) $('autoLine').innerHTML += '<div class="copy-prev"><button type="button" class="link" id="btnCopyPrev" data-rid="' + prevR.id + '">↺ 帶入上一張（' + esc(prevR.docNo) + '）的判定與實測值</button></div>';
+    if (prevR) $('autoLine').innerHTML += '<div class="copy-prev"><button type="button" class="link" id="btnCopyPrev" data-rid="' + prevR.id + '">↺ 帶入上一張（' + esc(dispNo(p, w, prevR)) + '）的判定與實測值</button></div>';
     if (r.draft) $('autoLine').innerHTML += '<div class="draft-note">尚未存檔：按下方「確認並產生 A4 表單」後才會列入抽查紀錄；直接返回則不保留。</div>';
     var photoOnly = w.kind === 'photo';
     var canMove = w.kind !== 'matform';
     $('btnMove').hidden = !canMove; $('btnMoveTop').hidden = !canMove;
     $('tplRow').hidden = w.kind === 'irregular' || photoOnly; $('tplMsg').textContent = '';
     $('signCard').hidden = photoOnly;
-    ['docNo', 'location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
+    ['location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
+    $('docNo').value = dispNo(p, w, r);
     $('fixPerson').placeholder = I.inspector || '';
     document.querySelectorAll('input[name="fix"]').forEach(function (x) { x.checked = x.value === r.fix; });
     $('sigInspectorLbl').textContent = (single ? '監造現場人員' : '監造人員') + (I.inspector ? '（' + I.inspector + '）' : '');
@@ -772,7 +796,7 @@
     show('vForm');
     sizePad('sigInspector'); sizePad('sigFixer');
   }
-  ['docNo', 'location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) {
+  ['location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) {
     $(id).addEventListener('input', function () { R()[id] = $(id).value; save(); });
   });
 
@@ -804,7 +828,8 @@
         var std = '<textarea class="std-in" data-f="std" rows="2" placeholder="抽查標準（定性定量）" aria-label="抽查標準">' + esc(it.std) + '</textarea>';
         var tools = '<div class="row-tools">' + (!it.custom && it.std !== it.def ? '<button type="button" class="link" data-reset="' + it.key + '">還原預設標準</button>' : '') +
           (it.custom ? '<button type="button" class="link" data-delx="' + it.x + '">刪除此項目</button>' : '<button type="button" class="link" data-off="' + it.key + '">移除此項</button>') + '</div>';
-        return _itemHtml(attr, 'r' + id, name + std + tools, '', refText(it.ref), it.c.r, it.c.note, it.hint, 'n' + id);
+        var qty = W().kind === 'matform' ? '<label class="qty-in">抽驗數量<input data-f="qty" placeholder="例：3片" value="' + esc(it.c.qty || '') + '"></label>' : '';
+        return _itemHtml(attr, 'r' + id, name + std + tools, '', refText(it.ref), it.c.r, it.c.note, it.hint, 'n' + id, qty);
       }).join('');
       var rem = g.removed;
       var remHtml = rem.length ? '<div class="removed">已移除：' + rem.map(function (o) { return '<button type="button" class="link" data-restore="' + o.key + '">' + esc(o.name) + ' ↺</button>'; }).join('') + '</div>' : '';
@@ -1130,7 +1155,7 @@
   $('btnDelRec').addEventListener('click', function () {
     var r = R();
     if (r.draft) { var dl = recs(proj(cur.pid), cur.wid); dl.splice(dl.indexOf(r), 1); save(); history.back(); return; }
-    ask('刪除紀錄 ' + r.docNo + '？', '會移到工程頁最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除紀錄', function () {
+    ask('刪除紀錄 ' + dispNo(proj(cur.pid), W(), r) + '？', '會移到工程頁最下方的「最近刪除」，7 天內可以復原。', '取消', '刪除紀錄', function () {
       var p = proj(cur.pid), list = recs(p, cur.wid); list.splice(list.indexOf(r), 1);
       toTrash(p, 'rec', r, { wid: cur.wid }); save();
       history.back();
@@ -1152,7 +1177,14 @@
       delete r.draft; save();
       go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return;
     }
-    var toPreview = function () {
+    var toPreview = function (ok2) {
+      var cat = codeCat(w);
+      if (ok2 !== true && cat && (r.draft || r.codeDate !== r.checkDate)) {
+        var p0 = proj(cur.pid), me = codeKey(r), later = 0;
+        Object.keys(p0.recs).forEach(function (wid) { if (codeCat(WORK[wid]) !== cat) return; p0.recs[wid].forEach(function (x) { if (x !== r && !x.draft && codeKey(x) > me) later++; }); });
+        if (later) return ask('編號會往後調整', '這張（' + roc(r.checkDate, '.') + '）比已確認的 ' + later + ' 張日期早，那 ' + later + ' 張的 ' + cat + ' 編號會各往後移一號；已印出的請重印。', '返回修改', '確認並繼續', function () { toPreview(true); });
+      }
+      r.codeDate = r.checkDate;
       delete r.draft; if (hasStd(w) && !r.snap) r.snap = snapOf(w, r); save();
       if (!isFix(w) && !r.result) { r.result = stats(w, r).ng ? 'ng' : 'ok'; save(); }
       if (w.kind === 'matform' && r.hand && !stats(w, r).ng) { var m0 = matById(proj(cur.pid), r.mid); if (m0) { m0.inspDate = r.checkDate || today(); save(); } go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return; }
@@ -1195,7 +1227,7 @@
     var p = proj(cur.pid), w = W(), r = R(), batch = (cur.batch || []).map(function (id) { return recById(p, w.id, id); }).filter(Boolean);
     if (!batch.length) batch = [r];
     var multi = batch.length > 1;
-    topbar('列印預覽', multi ? w.name + ' · 共 ' + batch.length + ' 張' : recTitle(w, r) + ' ' + r.docNo, multi ? w.name : '返回修改');
+    topbar('列印預覽', multi ? w.name + ' · 共 ' + batch.length + ' 張' : recTitle(w, r) + ' ' + dispNo(p, w, r), multi ? w.name : '返回修改');
     $('btnMovePv').hidden = w.kind === 'matform' || multi;
     $('pvParts').hidden = false;
     document.querySelectorAll('[data-part]').forEach(function (x) { x.checked = !!PARTS[x.dataset.part]; x.closest('label').hidden = w.kind === 'photo' && x.dataset.part !== 'photo'; });
@@ -1354,7 +1386,7 @@
       });
     });
     var fix = '缺失複查結果：<br>' + box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善<br>複查日期：' + (on && roc(r.fixDate) || '　　　年　　月　　日') + '<br>複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '');
-    return '<div class="pf pf-fit"><h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表 (' + (r.phase + 1) + ')') + '</h3><p class="no">編號：</p>' +
+    return '<div class="pf pf-fit"><h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表 (' + (r.phase + 1) + ')') + '</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       '<table>' + PF_COLS +
       '<tr style="height:7.7mm"><td>工程名稱</td><td colspan="6">' + esc(I.name) + '</td></tr>' +
       '<tr style="height:11mm"><td>分項工程名稱</td><td colspan="6">' + esc(w.name) + '</td></tr>' +
@@ -1374,9 +1406,9 @@
     var I = p.info, m = matById(p, r.mid) || { name: '' }, cols = '<colgroup><col style="width:19.52%"><col style="width:29.79%"><col style="width:13.35%"><col style="width:17.46%"><col style="width:19.88%"></colgroup>';
     var body = '';
     effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) {
-      body += '<tr class="it"><td class="c">' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td></td><td>' + esc(it.c.note) + '</td><td class="res">' + (MT_RES[it.c.r] || '') + '</td></tr>';
+      body += '<tr class="it"><td class="c">' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td>' + esc(it.c.qty || '') + '</td><td>' + esc(it.c.note) + '</td><td class="res">' + (MT_RES[it.c.r] || '') + '</td></tr>';
     }); });
-    return '<div class="pf pf-mat pf-fit"><h3>材料設備品質抽驗紀錄表</h3><p class="no">編號：</p>' +
+    return '<div class="pf pf-mat pf-fit"><h3>材料設備品質抽驗紀錄表</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       '<table>' + cols +
       '<tr style="height:10mm"><td class="c">工程名稱</td><td colspan="4">' + esc(I.name) + '</td></tr>' +
       '<tr style="height:10mm"><td class="c">材料/設備名稱</td><td>' + esc(m.name) + '</td><td>檢查日期</td><td colspan="2">' + (r.checkDate ? roc(r.checkDate) : '　　年　　月　　日') + '</td></tr></table>' +
@@ -1462,7 +1494,7 @@
     }
     inner += '</table>';
     var ng = r.result === 'ng';
-    return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：</p>' +
+    return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       headTable(I.name, '', r) + '</table>' +
       '<table style="border-top:0" class="single"><tbody>' +
       '<tr><td>一、抽驗說明：<br>' + notes.map(function (n, i) { return '(' + '一二三四'[i] + ')' + esc(n); }).join('<br>') + '</td></tr>' +
@@ -1533,7 +1565,7 @@
       '<button type="button" class="btn sm" id="btnMatRecNew">＋ 新增抽查表</button></div>' +
       (mrecs.map(function (r) {
         var s = stats(D.matWork, r);
-        return '<button type="button" class="rec" data-mrid="' + r.id + '"><span class="rb-main"><span class="rb-title">' + esc(r.docNo) + (s.ng ? '<span class="badge-ng">' + s.ng + ' 缺失</span>' : '') + '</span>' +
+        return '<button type="button" class="rec" data-mrid="' + r.id + '"><span class="rb-main"><span class="rb-title">' + esc(dispNo(p, D.matWork, r)) + (s.ng ? '<span class="badge-ng">' + s.ng + ' 缺失</span>' : '') + '</span>' +
           '<span class="rb-meta">' + esc([r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · ')) + '</span></span><span class="rb-right">' + s.d + '/' + s.t + '</span><span class="chev">›</span></button>';
       }).join('') || '<div class="pb-empty">尚無抽查表。進場抽查時按「新增抽查表」，完成後會自動記錄抽查日期與結果。</div>');
     show('vMatItem');
@@ -2880,7 +2912,7 @@
         var m = w.kind === 'matform' && matById(p, r.mid), st = recState(w, r), single = !isFix(w);
         if (r.hand && st !== 'ng' && st !== 'fixed') st = 'hand';
         if (w.kind === 'matform') usedMat[r.mid] = 1;
-        var row = { date: r.checkDate, no: r.docNo || '', name: w.kind === 'matform' ? (m ? m.name : '材料') + '進場抽查' : w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name, loc: r.location || '', st: st };
+        var row = { date: r.checkDate, no: recCode(p, w, r), name: w.kind === 'matform' ? (m ? m.name : '材料') + '進場抽查' : w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.name, loc: r.location || '', st: st };
         (w.kind === 'matform' ? mats : cons).push(row);
         if (st === 'ng' || st === 'fixed') {
           var items = [];
@@ -2965,7 +2997,7 @@
       var f = defInfo(x, to), r = x.r || {}, phs = r.photos || [];
       var aft = phs.filter(function (q) { return /改善後|改善完成|完成後|複查/.test(q.cap || ''); }), bef = phs.filter(function (q) { return aft.indexOf(q) < 0; });
       var fixer = x.single ? '' : esc(r.fixPerson || I.inspector || '') + ' ' + (r.sig && r.sig.sigFixer ? sigImg(r, 'sigFixer') : '');
-      return '<section' + (i ? ' class="rec-sec"' : '') + '><h3>施工品質缺失處理改善暨追蹤紀錄表</h3><p class="no">編號：' + esc(x.no) + '-NG</p>' +
+      return '<section' + (i ? ' class="rec-sec"' : '') + '><h3>施工品質缺失處理改善暨追蹤紀錄表</h3><p class="no">編號：' + (codes(p).H[r.id] || '') + '</p>' +
         '<table class="trk"><colgroup><col style="width:16%"><col style="width:34%"><col style="width:16%"><col style="width:34%"></colgroup>' +
         '<tr><th>工程名稱</th><td colspan="3">' + esc(I.name || '') + '</td></tr>' +
         '<tr><th>工項名稱</th><td>' + esc(x.name) + '</td><th>位置</th><td>' + esc(x.loc) + '</td></tr>' +
@@ -3225,13 +3257,14 @@
   function photoPages(w, r) {
     var items = r.photos || []; if (!items.length) return '';
     var head = esc(photoTitle(w)) + ' ' + roc(r.checkDate, '.'), out = '';
+    var pp = proj(cur.pid), lno = pp ? codes(pp).L[r.id] || '' : '', gno = pp && codeCat(w) ? recCode(pp, w, r) : '';
     var img = function (x) { return '<td class="ph-img">' + (x ? '<img alt="" data-img="' + x.id + '">' : '') + '</td>'; };
     var cap = function (x) { return '<td class="ph-cap">' + (x ? esc(x.cap) : '') + '</td>'; };
     for (var i = 0, pn = 1; i < items.length; i += 6, pn++) {
       var pg = items.slice(i, i + 6), rows = '';
       for (var k2 = 0; k2 < 3; k2++) rows += '<tr>' + img(pg[k2 * 2]) + img(pg[k2 * 2 + 1]) + '</tr><tr>' + cap(pg[k2 * 2]) + cap(pg[k2 * 2 + 1]) + '</tr>';
       out += '<section class="ph-page"><h3>' + head + '</h3><table class="ph"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>' + rows + '</table>' +
-        '<div class="ph-pno">照片 ' + pn + ' / ' + Math.ceil(items.length / 6) + '</div></section>';
+        '<div class="ph-pno">照片 ' + pn + ' / ' + Math.ceil(items.length / 6) + (lno ? '　' + lno + (gno ? '（對應 ' + gno + '）' : '') : '') + '</div></section>';
     }
     return out;
   }
@@ -3241,7 +3274,7 @@
   function openMove() {
     var p = proj(cur.pid), w = W(), r = R();
     if (S.projects.length < 2) { ask('還沒有其他工程', '請先在工程清單新增要移入的工程，再回來移動或複製這張表。', '好', '前往工程清單', function () { go({ v: 'projects' }); }); return; }
-    $('mvInfo').textContent = '「' + recTitle(w, r) + ' ' + r.docNo + '」會放到所選工程的同一工項、同一階段，編號依該工程重新編排。';
+    $('mvInfo').textContent = '「' + recTitle(w, r) + ' ' + dispNo(proj(cur.pid), w, r) + '」會放到所選工程的同一工項、同一階段，編號依該工程重新編排。';
     $('mvList').innerHTML = S.projects.filter(function (x) { return x !== p; }).map(function (x, i) {
       return '<label class="pill"><input type="radio" name="mvTo" value="' + x.id + '"' + (i ? '' : ' checked') + '><span>' + esc(x.info.name || '未命名工程') + '</span></label>';
     }).join('');
@@ -3291,7 +3324,7 @@
       (p.recs[wid] || []).forEach(function (r) {
         if (!r.checkDate) return;
         var m = w.kind === 'matform' && matById(p, r.mid);
-        ev.push({ date: r.checkDate, kind: 'rec', label: m ? '材料抽查：' + m.name : workLabel(w, r.phase), sub: [r.docNo, r.location].filter(Boolean).join(' · '), ng: stats(w, r).ng, wid: wid, rid: r.id });
+        ev.push({ date: r.checkDate, kind: 'rec', label: m ? '材料抽查：' + m.name : workLabel(w, r.phase), sub: [dispNo(p, w, r), r.location].filter(Boolean).join(' · '), ng: stats(w, r).ng, wid: wid, rid: r.id });
         linked[r.id] = 1; linked[wid + '|' + (w.kind === 'phased' ? r.phase : 0) + '|' + r.checkDate] = 1;
       });
     });
@@ -3434,7 +3467,8 @@
     if (!link) return null;
     var a = link.split('|'), w = WORK[a[0]], r = w && recById(p, a[0], a[1]);
     if (!r) return null;
-    return { w: w, r: r, short: r.docNo, long: (w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : recTitle(w, r)) + ' ' + r.docNo };
+    var no = dispNo(p, w, r);
+    return { w: w, r: r, short: no, long: (w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : recTitle(w, r)) + ' ' + no };
   }
   function markText(p, m) { var li = linkInfo(p, m.rid); return m.t || (li ? li.short : ''); }
   function linkedMarks(p, link) {
@@ -3728,7 +3762,7 @@
       if (!list.length) return;
       html += '<optgroup label="' + esc(w.name) + '">' + list.map(function (r) {
         var v = w.id + '|' + r.id;
-        return '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + esc((w.kind === 'phased' ? '(' + (r.phase + 1) + ') ' : '') + r.docNo + (r.location ? ' · ' + r.location : '')) + '</option>';
+        return '<option value="' + v + '"' + (v === sel ? ' selected' : '') + '>' + esc((w.kind === 'phased' ? '(' + (r.phase + 1) + ') ' : '') + dispNo(p, w, r) + (r.location ? ' · ' + r.location : '')) + '</option>';
       }).join('') + '</optgroup>';
     });
     return html;
@@ -4063,7 +4097,7 @@
           (r.rows || []).forEach(function (x) { notes.push(x.name, x.note); });
           (r.photos || []).forEach(function (x) { notes.push(x.cap); });
           notes.push(r.remark, r.methodNote);
-          var title = (m ? '材料抽查：' + m.name : w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : w.name) + ' ' + r.docNo;
+          var title = (m ? '材料抽查：' + m.name : w.kind === 'phased' ? w.name + '(' + (r.phase + 1) + ')' : w.name) + ' ' + dispNo(p, w, r);
           out.push({ pid: p.id, pn: pn, tag: '抽查表', title: title, sub: [r.checkDate && roc(r.checkDate, '.'), r.location].filter(Boolean).join(' · '),
             text: [title, r.location, r.checkDate, roc(r.checkDate || '', '.'), notes.filter(Boolean).join(' ')].join(' '), go: { v: 'form', pid: p.id, wid: wid, rid: r.id } });
         });

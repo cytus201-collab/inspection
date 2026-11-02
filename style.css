@@ -846,3 +846,6 @@ button.kpi{cursor:pointer}
 .paper .pf.pf-mat{font-family:"GW Kai","DFKai-SB","BiauKai TC","標楷體-繁","標楷體",serif;font-weight:400;font-size:10pt;margin:0 9mm}
 .paper .pf.pf-mat td{font-weight:400;padding:.4mm 1mm}
 .paper .pf.pf-mat tr.it td,.paper .pf.pf-mat tr.blank td{height:10mm}
+.qty-in{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px;font-weight:700;color:var(--ink2)}
+.qty-in input{flex:1;min-width:0;max-width:220px;border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-weight:400;background:var(--bg);color:var(--ink)}
+#docNo[readonly]{background:var(--bg2,#f3f3f3);color:var(--ink2)}
