@@ -859,3 +859,20 @@ button.kpi{cursor:pointer}
 .paper .pf.pf-irr .irr-items{min-height:2lh}
 .paper .pf.pf-irr .irr-sig{font-family:"GW Kai","DFKai-SB","BiauKai TC","標楷體-繁","標楷體",serif;font-size:12pt;margin:2pt 0 0}
 .paper .pf.pf-irr .irr-sig img{height:28pt;vertical-align:middle}
+/* 監造計畫表2-7 建築物監造（監督、查核）報告表（v77）：標楷10pt、上下2.5cm、左2cm、右1.75cm、表寬17.8cm */
+.paper .pf.pf-arch{font-family:"GW Kai","DFKai-SB","BiauKai TC","標楷體-繁","標楷體",serif;font-weight:400;font-size:10pt;line-height:1.35;margin:17mm 0 0 4.9mm}
+.paper .pf.pf-arch h3{margin:0 0 4pt}
+.paper .pf.pf-arch table{width:178mm}
+.paper .pf.pf-arch td{font-weight:400;padding:.7mm .4mm;height:4.7mm}
+.paper .pf.pf-arch td.c{text-align:center}
+.paper .pf.pf-arch td.r{text-align:right}
+.paper .pf.pf-arch td.j{text-align:justify}
+.paper .pf.pf-arch td.b{font-weight:700}
+.paper .pf.pf-arch td.vt{line-height:1.1}
+.paper .pf.pf-arch td.sm{font-size:8pt}
+.paper .pf.pf-arch td.top{vertical-align:top}
+.paper .pf.pf-arch .nb{font-weight:400;margin-top:2pt}
+#groups.arch .std-in,#groups.arch [data-reset]{display:none}
+.arch-head{margin-bottom:12px}
+.arch-head .muted{overflow-wrap:anywhere}
+.paper .pf.pf-arch td.ck{font-size:13pt;line-height:1}

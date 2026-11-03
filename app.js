@@ -27,6 +27,8 @@
     { k: 'supervisor', l: '監造單位' },
     { k: 'contractor', l: '承包商' },
     { k: 'amount', l: '契約金額', im: 'numeric' },
+    { k: 'permitNo', l: '建雜照號碼' },
+    { k: 'regNo', l: '登記碼' },
     { k: 'startDate', l: '開工日期', t: 'date' },
     { k: 'durType', l: '工期類型', t: 'select', opts: ['日曆天', '工作天', '限期完工'] },
     { k: 'duration', l: '契約工期（天）', t: 'number' },
@@ -118,21 +120,21 @@
   function recById(p, wid, rid) { return recs(p, wid).filter(function (r) { return r.id === rid; })[0]; }
   /* 文件分類編碼（監造計畫表8-1）：G 施工抽查、F 材料抽驗、L 施工照片、H 缺失追蹤；每個工程各自依日期（同日依建立順序）流水編號 */
   var codeCache = null;
-  function codeCat(w) { return !w ? '' : w.kind === 'matform' ? 'F' : w.kind === 'photo' ? '' : 'G'; }
+  function codeCat(w) { return !w ? '' : w.kind === 'matform' ? 'F' : w.kind === 'archrep' ? 'I' : w.kind === 'photo' ? '' : 'G'; }
   function codeKey(r) { return (r.checkDate || '9999') + '|' + ('000000000000000' + (r.created || 0)).slice(-15) + '|' + r.id; }
   function codes(p) {
     if (codeCache && codeCache.p === p) return codeCache.m;
-    var L = { G: [], F: [], L: [], H: [] };
+    var L = { G: [], F: [], I: [], L: [], H: [] };
     Object.keys(p.recs || {}).forEach(function (wid) {
       var w = WORK[wid]; if (!w) return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft) return;
         var c = codeCat(w); if (c) L[c].push(r);
         if ((r.photos || []).length) L.L.push(r);
-        if (w.kind !== 'photo') { var st = recState(w, r); if (st === 'ng' || st === 'fixed') L.H.push(r); }
+        if (w.kind !== 'photo' && w.kind !== 'archrep') { var st = recState(w, r); if (st === 'ng' || st === 'fixed') L.H.push(r); }
       });
     });
-    var m = { G: {}, F: {}, L: {}, H: {} };
+    var m = { G: {}, F: {}, I: {}, L: {}, H: {} };
     Object.keys(L).forEach(function (k) { L[k].sort(function (a, b) { return codeKey(a) < codeKey(b) ? -1 : 1; }).forEach(function (r, i) { m[k][r.id] = k + '-' + ('00' + (i + 1)).slice(-3); }); });
     codeCache = { p: p, m: m }; return m;
   }
@@ -715,7 +717,7 @@
     if (batchWid !== w.id) batchSel = null;
     topbar(w.name, p.info.name || '未命名工程', p.info.name || '工程');
     var blocks = w.kind === 'phased' ? w.phases.map(function (ph, pi) { return { pi: pi, title: '(' + (pi + 1) + ') ' + flowName(pi), n: countItems(ph) + ' 項' }; })
-      : [{ pi: 0, title: w.kind === 'photo' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'safety' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
+      : [{ pi: 0, title: w.kind === 'photo' || w.kind === 'archrep' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'safety' || w.kind === 'archrep' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
     $('phaseBlocks').innerHTML = blocks.map(function (b) {
       var items = list.filter(function (r) { return r.phase === b.pi; }).sort(function (a, c) { return c.seq - a.seq; });
       var rows = items.map(function (r) {
@@ -735,7 +737,7 @@
     $('batchBar').innerHTML = batchSel ? '<span class="bb-n">已選 ' + ns + ' 張</span><button type="button" class="link" data-bb="all">全選</button><button type="button" class="link" data-bb="cancel">取消</button>' +
       '<button type="button" class="btn primary sm" data-bb="go"' + (ns ? '' : ' disabled') + '>預覽輸出</button>'
       : '<button type="button" class="link" data-bb="start">☑ 批次輸出 PDF</button>';
-    $('workRefs').textContent = w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
+    $('workRefs').textContent = w.kind === 'archrep' ? '每次督導新增一筆，填寫「建築物監造（監督、查核）報告表」（監造計畫表2-7，內政部格式），可附現場照片；各欄選填，可印空白表手填。' : w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
       : '抽查標準依據：' + w.sources.map(function (s) { return D.refs[s]; }).join('；') + '。數值請依本案契約圖說確認。';
     show('vWork');
   }
@@ -786,12 +788,16 @@
     $('fixPerson').placeholder = I.inspector || '';
     document.querySelectorAll('input[name="fix"]').forEach(function (x) { x.checked = x.value === r.fix; });
     $('sigInspectorLbl').textContent = (single ? '監造現場人員' : '監造人員') + (I.inspector ? '（' + I.inspector + '）' : '');
-    $('phasedFix').hidden = single || photoOnly; $('singleResult').hidden = !single || photoOnly;
+    var arch = w.kind === 'archrep';
+    $('phasedFix').hidden = single || photoOnly; $('singleResult').hidden = !single || photoOnly || arch;
+    if (arch) { $('signCard').hidden = true; $('tplRow').hidden = true; }
+    $('groups').classList.toggle('arch', arch);
     $('irrPicker').hidden = w.kind !== 'irregular';
     if (photoOnly) { $('groups').innerHTML = ''; $('tbRight').textContent = (r.photos || []).length + ' 張'; }
     else {
       if (single) fillSingle(r); else fixVis();
       if (w.kind === 'irregular') { fillPickWork(); renderRows(); } else renderGroups();
+      if (arch) $('groups').insertAdjacentHTML('afterbegin', archHead(p, r));
     }
     $('phMsg').textContent = ''; renderPhotoGrid(); pinInfo();
     show('vForm');
@@ -818,6 +824,16 @@
     var w = W(), r = R();
     ask('更新為最新抽查標準？', '已填的判定與實測值會依項目代碼保留；新版已刪除的項目不再顯示，新增的項目需要補填。', '取消', '更新', function () { r.snap = snapOf(w, r); save(); renderForm(); });
   });
+  /* 建築師督導：報告表表頭欄位（工程資料自動帶入的部分在工程設定修改） */
+  function archHead(p, r) {
+    var a = r.ar || {}, I = p.info;
+    var f = function (k, l, ph, t) { return '<label class="f">' + l + '<input data-ar="' + k + '"' + (t ? ' type="' + t + '"' : '') + ' placeholder="' + (ph || '') + '" value="' + esc(a[k] || '') + '"></label>'; };
+    return '<section class="card arch-head"><h2 class="h small">報告表欄位</h2>' +
+      '<p class="muted">自動帶入：建雜照號碼「' + esc(I.permitNo || '未填') + '」、登記碼「' + esc(I.regNo || '未填') + '」、開工／竣工日期、契約工期與金額、變更次數、展延天數（在工程設定修改）。填表日期＝上方檢查日期。</p>' +
+      '<div class="grid g2">' + f('time', '填表時間', '', 'time') + f('insp', '勘驗項目', '例：結構體勘驗') + f('plan', '預定進度（％）', '例：45.2') + f('act', '實際進度（％）', '例：44.8') + '</div>' +
+      '<label class="f wide">四、其他約定監造事項<textarea data-ar="other" rows="3">' + esc(a.other || '') + '</textarea></label></section>';
+  }
+  $('groups').addEventListener('input', function (e) { var k = e.target.dataset.ar; if (!k) return; var r = R(); (r.ar || (r.ar = {}))[k] = e.target.value; save(); });
   /* 固定清單（分階段工項、勞安衛生） */
   function renderGroups() {
     var w = W(), r = R();
@@ -829,7 +845,8 @@
         var std = '<textarea class="std-in" data-f="std" rows="2" placeholder="抽查標準（定性定量）" aria-label="抽查標準">' + esc(it.std) + '</textarea>';
         var tools = '<div class="row-tools">' + (!it.custom && it.std !== it.def ? '<button type="button" class="link" data-reset="' + it.key + '">還原預設標準</button>' : '') +
           (it.custom ? '<button type="button" class="link" data-delx="' + it.x + '">刪除此項目</button>' : '<button type="button" class="link" data-off="' + it.key + '">移除此項</button>') + '</div>';
-        var qty = W().kind === 'matform' ? '<label class="qty-in">抽驗數量<input data-f="qty" placeholder="例：3片" value="' + esc(it.c.qty || '') + '"></label>' : '';
+        var qty = W().kind === 'matform' ? '<label class="qty-in">抽驗數量<input data-f="qty" placeholder="例：3片" value="' + esc(it.c.qty || '') + '"></label>' :
+          W().kind === 'archrep' ? '<label class="qty-in">備註<input data-f="rm" value="' + esc(it.c.rm || '') + '"></label>' : '';
         return _itemHtml(attr, 'r' + id, name + std + tools, '', refText(it.ref), it.c.r, it.c.note, it.hint, 'n' + id, qty);
       }).join('');
       var rem = g.removed;
@@ -1221,7 +1238,7 @@
     var out = '';
     if (w.kind === 'photo') { if (PARTS.photo || PARTS.form) out += photoPages(w, r).replace(/<\/section>$/, foot() + '</section>'); }
     else {
-      if (PARTS.form) out += (first ? '' : '<section class="rec-sec">') + (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : paperSingle(p, w, r)) + (first ? '' : '</section>');
+      if (PARTS.form) out += (first ? '' : '<section class="rec-sec">') + (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : w.kind === 'archrep' ? paperArch(p, w, r) : paperSingle(p, w, r)) + (first ? '' : '</section>');
       if (PARTS.photo) out += photoPages(w, r);
       if (PARTS.dwg) out += recDwgPages(p, w.id, r);
     }
@@ -1249,14 +1266,15 @@
     if (w.kind === 'photo') only = '';
     if (multi) {
       var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = rocNum(ds[0] || today()), d2 = rocNum(ds[ds.length - 1] || today());
-      setDocName(d1 + (d2 !== d1 ? '-' + d2 : '') + '_' + w.name + '抽查' + only);
+      var cs = batch.map(function (x) { return recCode(p, w, x); }).filter(Boolean).sort(), c1 = cs[0] || '', c2 = cs[cs.length - 1] || '';
+      setDocName((c1 ? c1 + (c2 !== c1 ? '～' + c2 : '') + '_' : '') + d1 + (d2 !== d1 ? '-' + d2 : '') + '_' + w.name + '抽查' + only);
     } else setDocName(recFileName(p, w, r) + only);
   }
   /* 檔名：民國日期在前，例 1151010_天花板工程(明架)施工中抽查 */
   function rocNum(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + a[1] + a[2] : ''; }
   function recFileName(p, w, r) {
-    var dt = rocNum(r.checkDate || today()), mm = w.kind === 'matform' && matById(p, r.mid);
-    return dt + '_' + (w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') : w.name);
+    var dt = rocNum(r.checkDate || today()), mm = w.kind === 'matform' && matById(p, r.mid), no = recCode(p, w, r);
+    return (no ? no + '_' : '') + dt + '_' + (w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') : w.kind === 'archrep' ? '建築物監造報告表' : w.name);
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
   $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; if (x.dataset.part === 'blank') setBlank(x.checked); else PARTS[x.dataset.part] = x.checked; renderPreview(); });
@@ -1489,6 +1507,45 @@
       for (var i = 0; i < n; i++) rtb.appendChild(mk());
     });
     host.remove();
+  }
+  /* 監造計畫表2-7「建築物監造（監督、查核）報告表」（內政部格式）：全表標楷體10pt、0.5pt框線、表寬17.8cm；各欄選填 */
+  var AR_COLS = [982, 268, 313, 848, 1677, 978, 1050, 578, 705, 1283, 1412];
+  function vtxt(t) { return t.split('').map(function (c) { return { '（': '︵', '）': '︶', '、': '︑' }[c] || c; }).join('<br>'); }
+  function paperArch(p, w, r) {
+    var I = p.info, a = r.ar || {}, bl = PARTS.blank, tot = AR_COLS.reduce(function (x, y) { return x + y; }, 0);
+    var cols = '<colgroup>' + AR_COLS.map(function (c) { return '<col style="width:' + (c / tot * 100).toFixed(3) + '%">'; }).join('') + '</colgroup>';
+    var ymd = function (d) { var x = (d || '').split('-'); return x.length === 3 ? (x[0] - 1911) + '年' + (+x[1]) + '月' + (+x[2]) + '日' : '年　月　日'; };
+    var fill = r.checkDate ? ymd(r.checkDate) + ' ' + (!bl && a.time ? (+a.time.slice(0, 2)) + ' 時' : '　時') : '　年　月　日　時';
+    var pm = (I.permitNo || '').match(/^(.*?)字第(.*?)號?$/);
+    var permit = I.permitNo ? (pm ? esc(pm[1]) + '字第' + esc(pm[2]) + '號' : esc(I.permitNo)) : '　　　　字第　　　　號';
+    var G = {}; effGroups(w, r).forEach(function (g) { G[g.gid] = g; });
+    var row = function (it, lead, span, no) {
+      var c = it.c, na = !bl && c.r === 'na';
+      return '<tr>' + lead + '<td colspan="' + span + '" class="j">' + (no ? no + '.' : '') + esc(it.name) + '</td><td class="c ck">' + (!bl && c.r === 'ok' ? 'ˇ' : '') + '</td><td class="c ck">' + (!bl && c.r === 'ng' ? 'ˇ' : '') + '</td>' +
+        '<td colspan="3">' + (bl ? '' : c.note ? esc(c.note) : na ? '無此項' : '') + '</td><td>' + (bl ? '' : esc(c.rm || '')) + '</td></tr>';
+    };
+    var items = function (gid) { return (G[gid] || { items: [] }).items; };
+    var head2 = function (t) { return '<tr><td rowspan="2" class="c">區分</td><td colspan="4" rowspan="2" class="c">' + t + '</td><td colspan="2" class="c">' + (t.indexOf('監') === 0 ? '監督結果' : '查核結果') + '</td><td colspan="3" rowspan="2" class="c">辦　　理　　情　　形</td><td rowspan="2" class="c">備　註</td></tr><tr><td class="c">合格</td><td class="c">不合格</td></tr>'; };
+    var body = head2('監　督　項　目');
+    items('AR-G1').forEach(function (it, k) { body += row(it, k ? '' : '<td class="c b" rowspan="' + items('AR-G1').length + '">一</td>', 4).replace('<td colspan="4" class="j">', '<td colspan="4" class="j b">'); });
+    var g2 = items('AR-G2');
+    g2.forEach(function (it, k) { body += row(it, k ? '' : '<td class="c b vt" rowspan="' + g2.length + '">' + vtxt('二、監督依設計圖說施工') + '</td>', 4, k + 1); });
+    body += head2('查　核　項　目');
+    var g3 = items('AR-G3'), g4 = items('AR-G4'), g5 = items('AR-G5'), n3 = g3.length + g4.length + g5.length, first = true;
+    var lead3 = function () { if (!first) return ''; first = false; return '<td class="c b vt" rowspan="' + n3 + '">' + vtxt('三、查核材料規格及品質') + '</td>'; };
+    g3.forEach(function (it, k) { body += row(it, lead3() + (k ? '' : '<td colspan="2" class="c vt sm" rowspan="' + g3.length + '">' + vtxt('鋼筋（鋼骨）') + '</td>'), 2, k + 1); });
+    g4.forEach(function (it, k) { body += row(it, lead3() + (k ? '' : '<td colspan="2" class="c vt sm" rowspan="' + g4.length + '">' + vtxt('混凝土') + '</td>'), 2, k + 1); });
+    g5.forEach(function (it) { body += row(it, lead3(), 4); });
+    var dur = I.changedDuration || I.duration, amt = I.changedAmount || I.amount;
+    return '<div class="pf pf-arch"><h3>建築物監造（監督、查核）報告表</h3><p class="no">編號：' + recCode(p, w, r) + '</p><table>' + cols +
+      '<tr><td colspan="2">工程名稱</td><td colspan="9">' + esc(I.name || '') + '</td></tr>' +
+      '<tr><td colspan="2">建雜照號碼</td><td colspan="5" class="c">' + permit + '</td><td colspan="2" class="c">登記碼</td><td colspan="2" class="c">' + esc(I.regNo || '') + '</td></tr>' +
+      '<tr><td colspan="2" class="c">開工日期</td><td colspan="2" class="c">' + ymd(I.startDate) + '</td><td class="c">竣 工 日 期</td><td colspan="2" class="c">' + ymd(I.actualEnd) + '</td><td colspan="2" class="c">填表日期</td><td colspan="2" class="c">' + fill + '</td></tr>' +
+      '<tr><td colspan="2" rowspan="2" class="c">勘驗<br>項目</td><td colspan="2" rowspan="2" class="c">' + esc(bl ? '' : a.insp || '') + '</td><td class="c">預定進度（﹪）</td><td class="c">' + esc(bl ? '' : a.plan || '') + '</td><td colspan="2" class="c">契約變更次數</td><td class="r">' + esc(I.changeCount || '') + ' 次</td><td class="c">契約工期</td><td class="c">' + (dur ? esc(dur) + ' 天' : '') + '</td></tr>' +
+      '<tr><td class="c">實際進度（﹪）</td><td class="c">' + esc(bl ? '' : a.act || '') + '</td><td colspan="2" class="c">工期展延天數</td><td class="r">' + esc(I.extendDays || '') + ' 天</td><td class="c">契約金額</td><td class="c">' + esc(amt || '') + '</td></tr>' +
+      body +
+      '<tr style="height:21mm"><td colspan="11" class="top b">四、其他約定監造事項' + (!bl && a.other ? '<div class="nb">' + esc(a.other).replace(/\n/g, '<br>') + '</div>' : '') + '</td></tr>' +
+      '<tr style="height:21.6mm"><td colspan="11" class="top b">五、查核簽章：【建築師】</td></tr></table></div>';
   }
   /* 監造計畫附錄B「不定期抽查紀錄」：標題標楷12pt、表內黑體細11pt兩倍行距、0.5pt框線、表寬17.24cm；各欄選填 */
   function paperIrr(p, w, r) {
@@ -2517,7 +2574,7 @@
       return xs.length ? '（' + xs.join('、') + '）' : '';
     };
     Object.keys(p.recs || {}).forEach(function (wid) {
-      var w = WORK[wid]; if (!w || w.kind === 'photo') return;
+      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep') return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft) return;
         var loc = r.location ? '（' + r.location + '）' : '';
@@ -2944,7 +3001,7 @@
   function sumData(p, to) {
     var cons = [], mats = [], defs = [], usedMat = {};
     Object.keys(p.recs || {}).forEach(function (wid) {
-      var w = WORK[wid]; if (!w || w.kind === 'photo') return;
+      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep') return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft || !r.checkDate || r.checkDate > to) return;
         var m = w.kind === 'matform' && matById(p, r.mid), st = recState(w, r), single = !isFix(w);
@@ -3211,7 +3268,7 @@
           if (!html.replace(/<[^>]+>/g, '').trim() && html.indexOf('<img') < 0) { skipped++; return; }
           src.className = 'paper'; src.innerHTML = html; fitForms(src); fitPlan(src);
           return imgsReady(src).then(function () { return makePdf(src); }).then(function (blob) {
-            var dir = it.mat ? '材料抽查/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
+            var dir = it.mat ? '材料抽查/' : it.w.kind === 'archrep' ? '監造報告/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
             while (used[dir + name]) name = base + '_' + n++;
             used[dir + name] = 1; zip.file(dir + name + '.pdf', blob); done++;
           });
