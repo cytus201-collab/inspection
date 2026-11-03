@@ -1187,14 +1187,14 @@
       }
       r.codeDate = r.checkDate;
       delete r.draft; if (hasStd(w) && !r.snap) r.snap = snapOf(w, r); save();
-      if (!isFix(w) && !r.result) { r.result = stats(w, r).ng ? 'ng' : 'ok'; save(); }
+      if (!isFix(w) && !r.result && !(w.kind === 'irregular' && (r.hand || !(r.rows || []).length))) { r.result = stats(w, r).ng ? 'ng' : 'ok'; save(); }
       if (w.kind === 'matform' && r.hand && !stats(w, r).ng) { var m0 = matById(proj(cur.pid), r.mid); if (m0) { m0.inspDate = r.checkDate || today(); save(); } go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return; }
       if (w.kind === 'matform') { var m = matById(proj(cur.pid), r.mid); if (m) { m.inspDate = r.checkDate || today(); m.inspResult = stats(w, r).ng ? 'ng' : 'ok'; save(); } }
       go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid });
     };
     if (w.kind === 'irregular') {
       var firstRow = -1;
-      if (!r.rows.length) { ask('尚未加入抽驗項目', '請先加入至少一個抽驗項目。', '好', '回去填寫', function () {}); return; }
+      if (!r.rows.length) return toPreview();   /* 監造計畫不定期抽查紀錄：各欄選填，可印空白表 */
       r.rows.forEach(function (x, i) { if (!x.r) { miss.push(x.name || '自訂項目'); if (firstRow < 0) firstRow = i; } });
       if (!miss.length) return toPreview();
       return ask('還有 ' + miss.length + ' 項未判定', miss.slice(0, 5).join('、') + '。', '回去填寫', '未判定的標為「／」並繼續', function () {
@@ -1432,6 +1432,14 @@
     document.body.appendChild(host);
     forms.forEach(function (f) {
       var mat = f.classList.contains('pf-mat'), target = (mat ? 262 : 266) * mm, sizes = mat ? [10, 9.5] : [11, 10.5, 10];
+      if (f.classList.contains('pf-irr')) {
+        /* 不定期：先縮行距（2倍→1.5倍），再縮字到 10pt；放不下就自然換頁 */
+        var ci = f.cloneNode(true); host.innerHTML = ''; host.appendChild(ci);
+        var steps = [[2.4, 11], [2.0, 11], [1.8, 11], [1.8, 10.5], [1.8, 10]], st = steps[0];
+        for (var si = 0; si < steps.length; si++) { st = steps[si]; ci.style.lineHeight = st[0]; ci.style.fontSize = st[1] + 'pt'; if (ci.getBoundingClientRect().height <= 280 * mm) break; }
+        f.style.lineHeight = st[0]; f.style.fontSize = st[1] + 'pt';
+        return;
+      }
       var c = f.cloneNode(true); host.innerHTML = ''; host.appendChild(c);
       var h = function () { return c.getBoundingClientRect().height + parseFloat(getComputedStyle(c).marginTop || 0); };
       var fs = sizes[0];
@@ -1482,7 +1490,28 @@
     });
     host.remove();
   }
+  /* 監造計畫附錄B「不定期抽查紀錄」：標題標楷12pt、表內黑體細11pt兩倍行距、0.5pt框線、表寬17.24cm；各欄選填 */
+  function paperIrr(p, w, r) {
+    var I = p.info, bl = PARTS.blank, ng = !bl && r.result === 'ng', mng = !bl && r.method;
+    var items = (r.rows || []).map(function (x, i) {
+      var head = '(' + cnNum(i + 1) + ')' + esc((x.work ? x.work + '／' : '') + (x.name || '')) + (x.std ? '：' + esc(x.std) : '');
+      var tail = bl ? '' : (x.note ? '　' + esc(x.note) : '') + (x.r ? '　' + SYM[x.r] : '');
+      return '<div>' + head + tail + '</div>';
+    }).join('');
+    return '<div class="pf pf-irr pf-fit"><h3>不定期抽查紀錄</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
+      '<table><colgroup><col style="width:13.34%"><col style="width:49.41%"><col style="width:14.39%"><col style="width:22.86%"></colgroup>' +
+      '<tr><td>工程名稱</td><td colspan="3">' + esc(I.name || '') + '</td></tr>' +
+      '<tr><td>檢查位置</td><td>' + esc(r.location || '') + '</td><td>檢查日期</td><td>' + (r.checkDate ? roc(r.checkDate, '.') : '') + '</td></tr>' +
+      '<tr><td colspan="4">一、抽驗說明：<br>(一)抽查方式依據承商自主檢查紀錄表隨機抽樣為抽查項目。<br>(二)本案抽驗不符部分，請承包商改善後再依程序提請複查。<br>二、抽驗項目：' +
+        '<div class="irr-items">' + (items || '<div>&nbsp;</div><div>&nbsp;</div>') + '</div>' +
+        box(!bl && r.result === 'ok') + '合格<br>' + box(ng) + '不合格　執行 ' + box(ng && r.exec === 'improve') + '改善　' + box(ng && r.exec === 'redo') + '拆除重作　改善期限：' + (ng && r.deadline ? roc(r.deadline) : '') + '</td></tr>' +
+      '<tr style="height:32.7mm"><td colspan="4" class="top">二、缺失處理方法：　' + box(mng && r.method === 'repair') + '修補改善　' + box(mng && r.method === 'redo') + '拆除重作' + (!bl && r.methodNote ? '<br>' + esc(r.methodNote) : '') + '</td></tr>' +
+      '<tr style="height:32.7mm"><td colspan="4" class="top">三、複驗結果：<br>' + box(!bl && r.re === 'ok') + '合格<br>' + box(!bl && r.re === 'ng') + '不合格，填具「施工不合管制總表」進行追蹤改善<br>複查時間：' + (!bl && r.reTime ? roc(r.reTime) : '') + '</td></tr>' +
+      '<tr style="height:30.2mm"><td colspan="4" class="top">備註：' + (r.remark ? '<br>' + esc(r.remark) : '') + '</td></tr></table>' +
+      '<p class="irr-sig">監造現場人員　' + esc(I.inspector || '') + ' ' + sigOut(r, 'sigInspector') + '</p></div>';
+  }
   function paperSingle(p, w, r) {
+    if (w.kind === 'irregular') return paperIrr(p, w, r);
     var I = p.info, isIrr = w.kind === 'irregular';
     var title = isIrr ? '不定期抽查紀錄' : '勞安衛生抽查紀錄';
     var notes = isIrr ? D.irregularNotes : D.safetyNotes;
