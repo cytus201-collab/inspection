@@ -12,7 +12,7 @@
     h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
     jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
     jszip: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-    heic: 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'
+    heic: 'https://cdn.jsdelivr.net/npm/heic-to@1.6.6/dist/iife/heic-to.js'
   };
   var $ = function (id) { return document.getElementById(id); };
   var WORK = {}; D.works.forEach(function (w) { WORK[w.id] = w; });
@@ -3256,7 +3256,7 @@
     var name = (f.name || 'photo').replace(/\.(heic|heif)$/i, '') + '.jpg';
     var wrap = function (blob) { try { return new File([blob], name, { type: 'image/jpeg' }); } catch (e) { blob.name = name; return blob; } };
     var native = new Promise(function (res, rej) {
-      var url = URL.createObjectURL(f), img = new Image(), t = setTimeout(function () { URL.revokeObjectURL(url); rej(); }, 4000);
+      var url = URL.createObjectURL(f), img = new Image(), t = setTimeout(function () { URL.revokeObjectURL(url); rej(); }, 8000);
       img.onload = function () {
         clearTimeout(t); var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
         c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(url);
@@ -3266,9 +3266,11 @@
       img.src = url;
     });
     return native.catch(function () {
-      return (window.heic2any ? Promise.resolve() : loadScript(CDN.heic).catch(function () { return loadScript('https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js'); })).then(function () {
-        return window.heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
-      }).then(function (out) { return wrap(Array.isArray(out) ? out[0] : out); });
+      /* heic-to（持續跟進 libheif，支援新款 iPhone 的 HEIC；舊的 heic2any 讀不了新機照片） */
+      return (window.HeicTo ? Promise.resolve() : loadScript(CDN.heic).catch(function () { return loadScript('https://unpkg.com/heic-to@1.6.6/dist/iife/heic-to.js'); }))
+        .catch(function () { throw new Error('load'); })
+        .then(function () { return window.HeicTo({ blob: f, type: 'image/jpeg', quality: 0.92 }); })
+        .then(function (out) { return wrap(out); });
     });
   }
   /* 把清單裡的 HEIC 換成 JPG；轉失敗的略過並回報 */
@@ -3280,11 +3282,14 @@
       return pr.then(function () {
         if (!isHeic(f)) { out.push(f); return; }
         if (msgEl) msgEl.textContent = 'HEIC 轉檔中…（' + (++done) + '/' + n + '）';
-        return heicToJpg(f).then(function (j) { out.push(j); }, function () { bad.push(f.name || 'HEIC'); });
+        return heicToJpg(f).then(function (j) { out.push(j); }, function (e) { if (e && e.message === 'load') bad.load = true; else if (window.console) console.warn('HEIC 轉檔失敗', f.name, e); bad.push(f.name || 'HEIC'); });
       });
     }, Promise.resolve()).then(function () { return { files: out, bad: bad }; });
   }
-  function heicBadMsg(bad) { return bad.length ? '（' + bad.join('、') + ' 無法轉檔，已略過；可在手機上改存成 JPG 再上傳）' : ''; }
+  function heicBadMsg(bad) {
+    if (!bad.length) return '';
+    return '（' + bad.join('、') + ' 無法轉檔，已略過；' + (bad.load ? '轉檔工具下載失敗，請確認網路連線後再試一次）' : '可在 iPhone「設定 › 相機 › 格式」改選「最相容」，或改傳 JPG）');
+  }
   function compress(file) {
     return new Promise(function (res, rej) {
       var url = URL.createObjectURL(file), img = new Image();
