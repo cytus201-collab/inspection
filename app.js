@@ -1211,7 +1211,10 @@
 
   /* ========== 預覽列印 ========== */
   /* 輸出內容：表單、照片、抽查位置圖可個別勾選（單張與批次共用） */
-  var PARTS = { form: true, photo: true, dwg: true };
+  var PARTS = { form: true, photo: true, dwg: true, blank: lsGet('pv-blank') === '1' };
+  /* 結果留空（查核手填用）：只影響列印，不改系統內資料 */
+  function setBlank(on) { PARTS.blank = !!on; lsSet('pv-blank', on ? '1' : '0'); var z = document.querySelector('[data-zp="blank"]'); if (z) z.checked = !!on; }
+  function sigOut(r, id) { return PARTS.blank ? '' : sigImg(r, id); }
   function recPaper(p, w, r, first) {
     bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
     var out = '';
@@ -1231,6 +1234,7 @@
     $('btnMovePv').hidden = w.kind === 'matform' || multi;
     $('pvParts').hidden = false;
     document.querySelectorAll('[data-part]').forEach(function (x) { x.checked = !!PARTS[x.dataset.part]; x.closest('label').hidden = w.kind === 'photo' && x.dataset.part !== 'photo'; });
+    $('pvBlankNote').hidden = !PARTS.blank;
     var paper = $('paper'); paper.className = 'paper';
     var html = batch.map(function (x, i) { return recPaper(p, w, x, i === 0); }).join('').replace(/^<section class="rec-sec">/, '<section>');
     paper.innerHTML = html || '<p class="pv-empty">所選的內容沒有可輸出的頁面（例如這幾張沒有照片或位置標記）。</p>';
@@ -1254,7 +1258,7 @@
     return dt + '_' + (w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') : w.name);
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
-  $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; PARTS[x.dataset.part] = x.checked; renderPreview(); });
+  $('pvParts').addEventListener('change', function (e) { var x = e.target.closest('[data-part]'); if (!x) return; if (x.dataset.part === 'blank') setBlank(x.checked); else PARTS[x.dataset.part] = x.checked; renderPreview(); });
   /* 檔名：工項＋階段＋抽查_民國日期（列印另存 PDF 時瀏覽器也會用這個名稱） */
   var docName = '';
   function setDocName(n) { $('pdfMsg').textContent = ''; docName = String(n).replace(/[\\/:*?"<>|]+/g, '_').trim(); document.title = docName; $('pdfName').value = docName; }
@@ -1362,7 +1366,7 @@
       if (!g.items.length) return;
       body += '<tr class="sub"><td colspan="4">' + esc(g.name) + '</td></tr>'; u += 1;
       g.items.forEach(function (it) {
-        body += '<tr><td>' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td>' + esc(it.c.note) + '</td><td class="res' + (it.c.r === 'ng' ? ' ng' : '') + '">' + (SYM[it.c.r] || '') + '</td></tr>';
+        body += '<tr><td>' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td>' + (PARTS.blank ? '' : esc(it.c.note)) + '</td><td class="res' + (it.c.r === 'ng' ? ' ng' : '') + '">' + (PARTS.blank ? '' : SYM[it.c.r] || '') + '</td></tr>';
         u += rowUnits(it.name, it.std, it.c.note) + 0.25;
       });
     });
@@ -1376,16 +1380,16 @@
   var PF_NOTES = ['1.檢查標準及實際檢查情形應具體明確或量化尺寸。', '2.查驗結果合格者註明「○」，不合格者註明「╳」，如無需查驗之項目則打「/」。', '3.嚴重缺失、缺失未完成改善，應填具「施工品質缺失處理改善暨追蹤紀錄表」追蹤改善。', '4.本表由工地現場監造人員實地檢查後覈實記載簽認。'];
   function pfFlowName(i) { return ['施工前', '施工中檢查', '施工完成檢查'][i]; }
   function paperPhased(p, w, r) {
-    var I = p.info, on = r.fix !== 'none', sp = '　　　　　';
+    var I = p.info, on = r.fix !== 'none' && !PARTS.blank, sp = '　　　　　';
     var flow = [0, 1, 2].map(function (i) { return box(i === r.phase) + pfFlowName(i); }).join(sp);
     var body = '';
     effGroups(w, r).forEach(function (g) {
       if (!g.items.length) return;
       g.items.forEach(function (it, k) {
-        body += '<tr class="it">' + (k ? '' : '<td rowspan="' + g.items.length + '">' + esc(g.name) + '</td>') + '<td>' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td colspan="3">' + esc(it.c.note) + '</td><td class="res">' + (SYM[it.c.r] || '') + '</td></tr>';
+        body += '<tr class="it">' + (k ? '' : '<td rowspan="' + g.items.length + '">' + esc(g.name) + '</td>') + '<td>' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td colspan="3">' + (PARTS.blank ? '' : esc(it.c.note)) + '</td><td class="res">' + (PARTS.blank ? '' : SYM[it.c.r] || '') + '</td></tr>';
       });
     });
-    var fix = '缺失複查結果：<br>' + box(r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善<br>複查日期：' + (on && roc(r.fixDate) || '　　　年　　月　　日') + '<br>複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '');
+    var fix = '缺失複查結果：<br>' + box(on && r.fix === 'done') + '已完成改善（檢附改善前中後照片）<br>' + box(on && r.fix === 'track') + '未完成改善，填具「施工品質缺失處理改善暨追蹤紀錄表」進行追蹤改善<br>複查日期：' + (on && roc(r.fixDate) || '　　　年　　月　　日') + '<br>複查人員簽名：' + (on ? esc(r.fixPerson || I.inspector) + ' ' + sigImg(r, 'sigFixer') : '');
     return '<div class="pf pf-fit"><h3>' + (w.printTitle ? esc(w.printTitle) : esc(w.name) + '施工抽查紀錄表 (' + (r.phase + 1) + ')') + '</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       '<table>' + PF_COLS +
       '<tr style="height:7.7mm"><td>工程名稱</td><td colspan="6">' + esc(I.name) + '</td></tr>' +
@@ -1398,7 +1402,7 @@
       '<div class="pf-tail"><table style="border-top:0">' + PF_COLS +
       '<tr style="height:26mm"><td colspan="7" class="pf-fix">' + fix + '</td></tr>' +
       '<tr style="height:24mm"><td colspan="7">' + PF_NOTES.join('<br>') + '</td></tr></table>' +
-      '<p class="pf-sig">監造工地負責（授權）人/監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigImg(r, 'sigInspector') + '</p></div></div>';
+      '<p class="pf-sig">監造工地負責（授權）人/監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigOut(r, 'sigInspector') + '</p></div></div>';
   }
   /* 監造計畫 表5-3 材料設備品質抽驗紀錄表（全表標楷體10pt；上0.8cm、左右1.9cm、下2.54cm） */
   var MT_RES = { ok: '合格', ng: '不合格', na: '／' };
@@ -1406,7 +1410,7 @@
     var I = p.info, m = matById(p, r.mid) || { name: '' }, cols = '<colgroup><col style="width:19.52%"><col style="width:29.79%"><col style="width:13.35%"><col style="width:17.46%"><col style="width:19.88%"></colgroup>';
     var body = '';
     effGroups(w, r).forEach(function (g) { g.items.forEach(function (it) {
-      body += '<tr class="it"><td class="c">' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td>' + esc(it.c.qty || '') + '</td><td>' + esc(it.c.note) + '</td><td class="res">' + (MT_RES[it.c.r] || '') + '</td></tr>';
+      body += '<tr class="it"><td class="c">' + esc(it.name) + '</td><td>' + esc(it.std) + '</td><td>' + esc(it.c.qty || '') + '</td><td>' + (PARTS.blank ? '' : esc(it.c.note)) + '</td><td class="res">' + (PARTS.blank ? '' : MT_RES[it.c.r] || '') + '</td></tr>';
     }); });
     return '<div class="pf pf-mat pf-fit"><h3>材料設備品質抽驗紀錄表</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       '<table>' + cols +
@@ -1416,7 +1420,7 @@
       '<thead><tr style="height:10mm"><td class="c">抽驗項目</td><td>抽驗標準</td><td>抽驗數量</td><td>抽驗值</td><td>抽驗結果</td></tr></thead><tbody>' + body + '</tbody></table>' +
       '<div class="pf-tail"><table style="border-top:0">' + cols +
       '<tr><td class="c">說明</td><td colspan="4">1.『抽驗結果』為抽驗值與抽驗標準之比較，填寫『合格』、『不合格』。<br>2.抽驗標準應依表5-8材料設備抽驗管理標準表及核定之送審資料填寫。<br>3.抽驗不合格則登錄至「材料設備檢（試）驗管制總表」(表5-7)第○項進行追蹤改善。</td></tr></table>' +
-      '<p class="pf-sig">監造工地負責（授權）人：' + esc(I.inspector || '') + '　　　　　　監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigImg(r, 'sigInspector') + '</p></div></div>';
+      '<p class="pf-sig">監造工地負責（授權）人：' + esc(I.inspector || '') + '　　　　　　監造現場人員簽名：' + esc(I.inspector || '') + ' ' + sigOut(r, 'sigInspector') + '</p></div></div>';
   }
   /* 一張 A4：不足補空白列；超出先縮字（施工表最小10pt、材料表最小9.5pt），仍超出則自然換頁 */
   function fitPlan(paper) {
@@ -1486,26 +1490,26 @@
     if (isIrr) {
       var u = 0;
       r.rows.forEach(function (x) {
-        inner += '<tr><td>' + esc((x.work ? x.work + '／' : '') + x.name) + '</td><td>' + esc(x.std) + '</td><td>' + esc(x.note) + '</td><td class="res' + (x.r === 'ng' ? ' ng' : '') + '">' + (SYM[x.r] || '') + '</td></tr>';
+        inner += '<tr><td>' + esc((x.work ? x.work + '／' : '') + x.name) + '</td><td>' + esc(x.std) + '</td><td>' + (PARTS.blank ? '' : esc(x.note)) + '</td><td class="res' + (x.r === 'ng' ? ' ng' : '') + '">' + (PARTS.blank ? '' : SYM[x.r] || '') + '</td></tr>';
         u += rowUnits(x.name, x.std, x.note) + 0.25;
       });
     } else {
       inner += tableBody(effGroups(w, r), PAD.safety);
     }
     inner += '</table>';
-    var ng = r.result === 'ng';
+    var bl = PARTS.blank, ng = !bl && r.result === 'ng';
     return '<div class="fit-form"><h3>' + title + '</h3><p class="no">編號：' + recCode(p, w, r) + '</p>' +
       headTable(I.name, '', r) + '</table>' +
       '<table style="border-top:0" class="single"><tbody>' +
       '<tr><td>一、抽驗說明：<br>' + notes.map(function (n, i) { return '(' + '一二三四'[i] + ')' + esc(n); }).join('<br>') + '</td></tr>' +
       '<tr><td>二、抽驗項目：' + inner +
-      '<div class="res-line">' + box(r.result === 'ok') + '合格</div>' +
+      '<div class="res-line">' + box(!bl && r.result === 'ok') + '合格</div>' +
       '<div class="res-line">' + box(ng) + '不合格　執行 ' + box(ng && r.exec === 'improve') + '改善　' + box(ng && r.exec === 'redo') + '拆除重作　改善期限：' + (ng && r.deadline ? roc(r.deadline) : '') + '</div></td></tr>' +
       '<tr><td>二、缺失處理方法：　' + box(ng && r.method === 'repair') + '修補改善　' + box(ng && r.method === 'redo') + '拆除重作' +
       (ng && r.methodNote ? '<br>' + esc(r.methodNote) : '') + '</td></tr>' +
-      '<tr><td style="line-height:1.7">三、複驗結果：<br>' + box(r.re === 'ok') + '合格<br>' + box(r.re === 'ng') + '不合格，填具「施工不合管制總表」進行追蹤改善<br>複查時間：' + (r.reTime ? roc(r.reTime) : '') + '</td></tr>' +
+      '<tr><td style="line-height:1.7">三、複驗結果：<br>' + box(!bl && r.re === 'ok') + '合格<br>' + box(!bl && r.re === 'ng') + '不合格，填具「施工不合管制總表」進行追蹤改善<br>複查時間：' + (!bl && r.reTime ? roc(r.reTime) : '') + '</td></tr>' +
       '<tr><td class="remark">備註：' + esc(r.remark) + '</td></tr></tbody></table>' +
-      '<p class="signline">監造現場人員：' + esc(I.inspector) + ' ' + sigImg(r, 'sigInspector') + '</p>' + foot() + '</div>';
+      '<p class="signline">監造現場人員：' + esc(I.inspector) + ' ' + sigOut(r, 'sigInspector') + '</p>' + foot() + '</div>';
   }
 
   /* ========== 5 材料抽查管制 ========== */
@@ -1712,7 +1716,7 @@
         '<td class="c">' + d(m.reviewDate) + '<br>' + esc(m.reviewResult) + '</td><td class="c">' + d(m.arrivalDate) + '</td>' +
         '<td class="c">' + d(m.inspDate) + '<br><b>' + ({ ok: '○', ng: '╳' }[m.inspResult] || '') + '</b></td><td>' + esc([m.archiveNo, m.remark].filter(Boolean).join(' ')) + '</td></tr>';
     }).join('');
-    bindOut(p, 'matOutAt'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
+    bindOut(p, 'matOutAt'); $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
     var paper = $('paper'); paper.className = 'paper landscape';
     paper.innerHTML = '<h3>材料設備送審管制總表</h3><p class="no">工程名稱：' + esc(I.name) + '</p>' +
       '<table class="mat"><colgroup><col style="width:3.5%"><col style="width:17%"><col style="width:8%"><col style="width:5%"><col style="width:8%"><col style="width:7%">' +
@@ -2293,7 +2297,7 @@
     gwPick = { d: d, copies: copies };
     (co.seal && d.sealOn ? loadImg(co.seal) : Promise.resolve()).then(function () { if (cur.v === 'docPrint' && cur.did === d.id) paint(); });
     paint();
-    $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
+    $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
     $('printHint').textContent = '「另存 PDF」每份各存一個檔案（檔名加上正本／副本與單位）' + (window.Cloud ? '，正本同時歸檔到雲端「監造公文／' + (p.info.name || '') + '／發文」' : '') + '。用瀏覽器列印時，紙張選 A4 直式。';
     gwFontCheck().then(function (ok) { if (cur.v === 'docPrint') gwFontBar(ok); });
     show('vPreview');
@@ -2651,7 +2655,7 @@
     topbar('列印預覽', cur.date ? rocYmd(cur.date) + ' 監造日報' : (+cur.ym.slice(0, 4) - 1911) + ' 年 ' + (+cur.ym.slice(5)) + ' 月監造日報（' + dates.length + ' 張）', cur.date ? '返回修改' : '日報月表');
     paper.className = 'paper dr-paper';
     paper.innerHTML = dates.length ? drPages(p, dates) : '<p class="pv-empty">這個月沒有在工期內的日期。</p>';
-    $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
+    $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = true;
     $('printHint').textContent = '版面依公共工程監造報表（A4 直式）。用瀏覽器列印時，紙張選 A4、邊界「無」或「預設」皆可。';
     gwFontCheck().then(function (ok) { if (/^daily/.test(cur.v)) gwFontBar(ok); });
     show('vPreview');
@@ -3023,7 +3027,7 @@
     $('sumFrom').value = from; $('sumTo').value = to; $('sumBar').hidden = false; $('sumKind').value = kind;
     $('sumFrom').closest('label').hidden = kind !== 'sum';
     if (kind !== 'sum') {
-      bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
+      bindOut(sumOut, 't'); $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
       show('vPreview');
       if (kind === 'ng') renderNgPrint(p, to, d); else renderTrackPrint(p, to, d);
       return;
@@ -3051,7 +3055,7 @@
       }) : '') +
       sumSubmit(p, to) +
       foot();
-    bindOut(sumOut, 't'); $('pvParts').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
+    bindOut(sumOut, 't'); $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('btnMovePv').hidden = true; $('outAt').closest('.out-at').hidden = false;
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
     setDocName('抽查總表_' + (I.name || '') + '_截至' + roc(to, '.'));
@@ -3133,11 +3137,11 @@
   var zipBusy = false;
   $('btnZip').addEventListener('click', function () {
     var a = ymRange(0); $('zipFrom').value = a[0]; $('zipTo').value = a[1];
-    $('zipMsg').textContent = ''; $('zipGo').disabled = false; $('zipNo').textContent = '取消';
+    $('zipMsg').textContent = ''; $('zipGo').disabled = false; $('zipNo').textContent = '取消'; setBlank(PARTS.blank);
     zipCount(); $('zipDlg').hidden = false;
   });
   $('zipDlg').addEventListener('click', function (e) { var b = e.target.closest('[data-zq]'); if (!b || zipBusy) return; var a = ymRange(b.dataset.zq === 'm1' ? 1 : 0); $('zipFrom').value = a[0]; $('zipTo').value = a[1]; zipCount(); });
-  $('zipDlg').addEventListener('change', function () { if (!zipBusy) zipCount(); });
+  $('zipDlg').addEventListener('change', function (e) { if (e.target.dataset.zp === 'blank') setBlank(e.target.checked); if (!zipBusy) zipCount(); });
   $('zipNo').addEventListener('click', function () { if (zipBusy) { zipBusy = 'stop'; $('zipMsg').textContent = '正在停止…'; return; } $('zipDlg').hidden = true; });
   function imgsReady(root) {
     return Promise.all(Array.prototype.map.call(root.querySelectorAll('img[data-img]'), function (img) {
@@ -3154,6 +3158,7 @@
     if (!L.length) { $('zipMsg').textContent = '這個範圍沒有可下載的抽查表。'; return; }
     if (!want.form && !want.photo && !want.dwg) { $('zipMsg').textContent = '「內容」至少勾選一項。'; return; }
     var keep = { form: PARTS.form, photo: PARTS.photo, dwg: PARTS.dwg }, keepOut = outTarget;
+    setBlank(want.blank);
     zipBusy = true; $('zipGo').disabled = true; $('zipNo').textContent = '停止';
     var only = want.form ? '' : want.photo && !want.dwg ? '_照片' : want.dwg && !want.photo ? '_位置圖' : '_照片及位置圖';
     var used = {}, done = 0, skipped = 0, zip;
@@ -3961,7 +3966,7 @@
     var p = proj(cur.pid), g = G(), land = g.w > g.h, num = function (m) { return g.marks.indexOf(m) + 1; };
     var ms = g.marks.filter(function (m) { return passFilter(p, m); }), fd = filterDesc();
     topbar('列印預覽', g.name, '圖說');
-    bindOut(g, 'outAt'); $('btnMovePv').hidden = true; $('pvParts').hidden = true; $('outAt').closest('.out-at').hidden = false;
+    bindOut(g, 'outAt'); $('btnMovePv').hidden = true; $('pvParts').hidden = true; $('pvBlankNote').hidden = true; $('outAt').closest('.out-at').hidden = false;
     var paper = $('paper'); paper.className = 'paper dw-paper' + (land ? ' landscape' : '');
     var rows = Math.min(ms.length, 30);
     paper.innerHTML = '<h3 class="dw-h3">抽查位置圖</h3><p class="no">工程名稱：' + esc(p.info.name) + '　圖說：' + esc(g.name) + (fd ? '　篩選：' + esc(fd) : '') + '</p>' +

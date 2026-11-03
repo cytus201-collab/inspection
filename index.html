@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300&display=swap">
-<link rel="stylesheet" href="style.css?v=72">
+<link rel="stylesheet" href="style.css?v=73">
 </head>
 <body>
 
@@ -473,11 +473,12 @@
     </div>
     <div class="sum-bar" id="sumBar" hidden><label>表單 <select id="sumKind"><option value="sum">抽查總表</option><option value="ng">施工不合格管制總表</option><option value="track">缺失改善追蹤紀錄表</option></select></label><label>本期起 <input type="date" id="sumFrom"></label><label>截至 <input type="date" id="sumTo"></label></div>
     <div class="gw-bar" id="gwBar" hidden></div>
-    <div class="pv-parts" id="pvParts"><span>輸出</span><label><input type="checkbox" data-part="form" checked>表單</label><label><input type="checkbox" data-part="photo" checked>照片</label><label><input type="checkbox" data-part="dwg" checked>位置圖</label></div>
+    <div class="pv-parts" id="pvParts"><span>輸出</span><label><input type="checkbox" data-part="form" checked>表單</label><label><input type="checkbox" data-part="photo" checked>照片</label><label><input type="checkbox" data-part="dwg" checked>位置圖</label><label class="pv-blank"><input type="checkbox" data-part="blank">結果留空（手填用）</label></div>
     <button type="button" class="btn ghost" id="btnMovePv">⇄ 移到／複製到其他工程</button>
     <button type="button" class="btn ghost" id="btnPrint">🖨 列印</button>
     <button type="button" class="btn primary" id="btnPdf">⬇ 另存 PDF</button>
   </div>
+  <p class="pv-blank-note noprint" id="pvBlankNote" hidden>結果留空中：實際抽查情形、抽查結果、缺失複查與簽名圖檔不會印出（系統內資料不變）。</p>
   <div class="pdf-row noprint"><label for="pdfName">檔名</label><input id="pdfName"><span>.pdf</span><span class="muted" id="pdfMsg" role="status"></span></div>
   <div class="gw-font noprint" id="gwFontBar" hidden></div>
   <p class="muted center noprint" id="printHint">紙張選 A4、邊界「預設」；要存 PDF 就把印表機選「另存為 PDF」。</p>
@@ -622,7 +623,8 @@
     <div class="zip-checks"><span class="zip-lb">內容</span>
       <label class="chk"><input type="checkbox" data-zp="form" checked><span>表單</span></label>
       <label class="chk"><input type="checkbox" data-zp="photo" checked><span>照片</span></label>
-      <label class="chk"><input type="checkbox" data-zp="dwg" checked><span>位置圖</span></label></div>
+      <label class="chk"><input type="checkbox" data-zp="dwg" checked><span>位置圖</span></label>
+      <label class="chk"><input type="checkbox" data-zp="blank"><span>結果留空（手填用）</span></label></div>
     <p id="zipCount"></p>
     <p id="zipMsg" class="zip-msg"></p>
     <div class="btn-row end">
@@ -644,9 +646,9 @@
   </div>
 </div>
 
-<script src="data.js?v=72"></script>
-<script src="mat-parse.js?v=72"></script>
-<script src="cloud.js?v=72"></script>
-<script src="app.js?v=72"></script>
+<script src="data.js?v=73"></script>
+<script src="mat-parse.js?v=73"></script>
+<script src="cloud.js?v=73"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>

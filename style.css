@@ -849,3 +849,5 @@ button.kpi{cursor:pointer}
 .qty-in{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px;font-weight:700;color:var(--ink2)}
 .qty-in input{flex:1;min-width:0;max-width:220px;border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-weight:400;background:var(--bg);color:var(--ink)}
 #docNo[readonly]{background:var(--bg2,#f3f3f3);color:var(--ink2)}
+.pv-blank{color:#b3261e;font-weight:700}
+.pv-blank-note{margin:6px 16px 0;padding:6px 10px;border-radius:8px;background:#fdecea;color:#7a1712;font-size:14px;overflow-wrap:anywhere}
