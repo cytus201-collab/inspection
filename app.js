@@ -11,7 +11,8 @@
     xlsx: 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
     h2c: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
     jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-    jszip: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    jszip: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    heic: 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js'
   };
   var $ = function (id) { return document.getElementById(id); };
   var WORK = {}; D.works.forEach(function (w) { WORK[w.id] = w; });
@@ -1809,7 +1810,11 @@
   $('inF').addEventListener('click', function (e) { var b = e.target.closest('[data-inf]'); if (b) { inFilter = b.dataset.inf; renderInList(proj(cur.pid)); } });
   $('inList').addEventListener('click', function (e) { var b = e.target.closest('[data-indoc]'); if (b) go({ v: 'inEdit', pid: cur.pid, did: b.dataset.indoc }); });
   $('inFile').addEventListener('change', function () {
-    var files = [].slice.call($('inFile').files), p = proj(cur.pid); $('inFile').value = ''; if (!files.length) return;
+    var raw = [].slice.call($('inFile').files); $('inFile').value = ''; if (!raw.length) return;
+    heicFix(raw, $('inMsg')).then(function (o) { if (o.bad.length) $('inMsg').textContent = heicBadMsg(o.bad); if (o.files.length) inAddFiles(o.files); });
+  });
+  function inAddFiles(files) {
+    var p = proj(cur.pid);
     var docs = files.map(function (f) {
       var d = { id: uid(), dir: 'in', kind: 'letter', src: 'gov', org: '', date: '', no: '', speed: '', att: '', subj: '', desc: '', short: '', due: '', st: 'check', note: '', fname: f.name, created: Date.now() };
       (p.docs = p.docs || []).push(d); inBusy[d.id] = '排隊中'; return d;
@@ -1820,7 +1825,7 @@
       $('inMsg').textContent = docs.length + ' 份收文已加入，請逐份點開確認欄位。';
       if (docs.length === 1 && cur.v === 'docs') go({ v: 'inEdit', pid: p.id, did: docs[0].id });
     });
-  });
+  }
   function readAs(f, how) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r[how](f); }); }
   function loadPdf(buf) {
     return (window.pdfjsLib ? Promise.resolve() : loadScript(CDN.pdf)).then(function () {
@@ -3216,6 +3221,41 @@
       return window.Cloud.getPhoto(id).then(function (d) { if (d) IDB.put(id, d).catch(function () {}); return d; });
     }).then(function (u) { if (u) thumbCache[id] = u; return u; }).catch(function () { return null; });
   }
+  /* HEIC／HEIF：瀏覽器能直接讀（Safari）就直接轉 JPG，否則載入 heic2any 在本機轉檔；轉成 JPG 後再走原本的壓縮流程 */
+  function isHeic(f) { return /\.(heic|heif)$/i.test(f.name || '') || /image\/hei[cf]/i.test(f.type || ''); }
+  function heicToJpg(f) {
+    var name = (f.name || 'photo').replace(/\.(heic|heif)$/i, '') + '.jpg';
+    var wrap = function (blob) { try { return new File([blob], name, { type: 'image/jpeg' }); } catch (e) { blob.name = name; return blob; } };
+    var native = new Promise(function (res, rej) {
+      var url = URL.createObjectURL(f), img = new Image(), t = setTimeout(function () { URL.revokeObjectURL(url); rej(); }, 4000);
+      img.onload = function () {
+        clearTimeout(t); var c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? res(wrap(b)) : rej(); }, 'image/jpeg', 0.92);
+      };
+      img.onerror = function () { clearTimeout(t); URL.revokeObjectURL(url); rej(); };
+      img.src = url;
+    });
+    return native.catch(function () {
+      return (window.heic2any ? Promise.resolve() : loadScript(CDN.heic).catch(function () { return loadScript('https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js'); })).then(function () {
+        return window.heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 });
+      }).then(function (out) { return wrap(Array.isArray(out) ? out[0] : out); });
+    });
+  }
+  /* 把清單裡的 HEIC 換成 JPG；轉失敗的略過並回報 */
+  function heicFix(files, msgEl) {
+    var list = Array.prototype.slice.call(files || []), n = list.filter(isHeic).length, bad = [];
+    if (!n) return Promise.resolve({ files: list, bad: bad });
+    var done = 0, out = [];
+    return list.reduce(function (pr, f) {
+      return pr.then(function () {
+        if (!isHeic(f)) { out.push(f); return; }
+        if (msgEl) msgEl.textContent = 'HEIC 轉檔中…（' + (++done) + '/' + n + '）';
+        return heicToJpg(f).then(function (j) { out.push(j); }, function () { bad.push(f.name || 'HEIC'); });
+      });
+    }, Promise.resolve()).then(function () { return { files: out, bad: bad }; });
+  }
+  function heicBadMsg(bad) { return bad.length ? '（' + bad.join('、') + ' 無法轉檔，已略過；可在手機上改存成 JPG 再上傳）' : ''; }
   function compress(file) {
     return new Promise(function (res, rej) {
       var url = URL.createObjectURL(file), img = new Image();
@@ -3230,7 +3270,11 @@
     });
   }
   function addPhotos(files) {
-    var r = R(), list = Array.prototype.slice.call(files || []); if (!list.length) return;
+    var raw = Array.prototype.slice.call(files || []); if (!raw.length) return;
+    heicFix(raw, $('phMsg')).then(function (o) { addPhotos2(o.files, o.bad); });
+  }
+  function addPhotos2(list, bad) {
+    var r = R(); if (!list.length) { $('phMsg').textContent = heicBadMsg(bad); return; }
     if (!r.photos) r.photos = [];
     $('phMsg').textContent = '正在處理 ' + list.length + ' 張照片…';
     var lastCap = r.photos.length ? r.photos[r.photos.length - 1].cap : '';
@@ -3242,7 +3286,7 @@
         });
       });
     }, Promise.resolve()).then(function () {
-      save(); renderPhotoGrid(); $('phMsg').textContent = '已加入 ' + list.length + ' 張。';
+      save(); renderPhotoGrid(); $('phMsg').textContent = '已加入 ' + list.length + ' 張。' + heicBadMsg(bad);
     }).catch(function (err) { save(); renderPhotoGrid(); $('phMsg').textContent = err.message || '照片加入失敗'; });
   }
   makeSortable($('phGrid'), '.ph-card', function (list) {
@@ -3610,7 +3654,10 @@
     });
   }
   $('dwgFile').addEventListener('change', function (e) {
-    var files = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; if (!files.length) return;
+    var raw = Array.prototype.slice.call(e.target.files || []); e.target.value = ''; if (!raw.length) return;
+    heicFix(raw, $('dwgMsg')).then(function (o) { if (o.files.length) dwgAddFiles(o.files, o.bad); else $('dwgMsg').textContent = heicBadMsg(o.bad); });
+  });
+  function dwgAddFiles(files, bad) {
     var p = proj(cur.pid), added = [];
     $('dwgMsg').textContent = '正在讀取圖說…';
     files.reduce(function (pr, f) {
@@ -3630,10 +3677,10 @@
         });
       });
     }, Promise.resolve()).then(function () {
-      $('dwgMsg').textContent = '已匯入 ' + added.length + ' 張圖說。';
-      if (added.length === 1) go({ v: 'dwg', pid: p.id, did: added[0].id, link: cur.link }, !!cur.link); else renderDwgs();
+      $('dwgMsg').textContent = '已匯入 ' + added.length + ' 張圖說。' + heicBadMsg(bad || []);
+      if (added.length === 1 && !(bad || []).length) go({ v: 'dwg', pid: p.id, did: added[0].id, link: cur.link }, !!cur.link); else renderDwgs();
     }).catch(function (err) { $('dwgMsg').textContent = err.message || '匯入失敗'; renderDwgs(); });
-  });
+  }
 
   /* 標記編輯器 */
   function colorsHtml(sel, attr) {

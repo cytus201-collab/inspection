@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300&display=swap">
-<link rel="stylesheet" href="style.css?v=73">
+<link rel="stylesheet" href="style.css?v=74">
 </head>
 <body>
 
@@ -202,8 +202,8 @@
     </div>
     <p class="muted">照片會接在抽查表後面一起輸出，每頁 6 張並附說明，新照片會沿用上一張的說明。</p>
     <div class="btn-row">
-      <label class="btn primary sm file-btn">拍照<input type="file" id="phCam" accept="image/*" capture="environment"></label>
-      <label class="btn ghost sm file-btn">從相簿加入<input type="file" id="phPick" accept="image/*" multiple></label>
+      <label class="btn primary sm file-btn">拍照<input type="file" id="phCam" accept="image/*,.heic,.heif" capture="environment"></label>
+      <label class="btn ghost sm file-btn">從相簿加入<input type="file" id="phPick" accept="image/*,.heic,.heif" multiple></label>
     </div>
     <p class="muted" id="phMsg" role="status"></p>
     <div id="phGrid" class="ph-grid"></div>
@@ -376,7 +376,7 @@
   <div class="ui-mode doc-tab" id="docTab" role="group" aria-label="發文或收文"><button type="button" data-dt="out" class="on">發文</button><button type="button" data-dt="in">收文</button></div>
   <section class="card" id="docInBox" hidden>
     <div class="head-row"><h2 class="h small">收文</h2>
-      <div class="doc-new"><label class="btn primary sm file-btn">＋ 上傳收文（PDF／照片）<input type="file" id="inFile" accept="application/pdf,image/*" multiple></label></div></div>
+      <div class="doc-new"><label class="btn primary sm file-btn">＋ 上傳收文（PDF／照片）<input type="file" id="inFile" accept="application/pdf,image/*,.heic,.heif" multiple></label></div></div>
     <p class="muted" id="inHint"></p>
     <p class="muted" id="inMsg" role="status"></p>
     <div class="cal-filter" id="inF" role="group" aria-label="篩選"></div>
@@ -491,7 +491,7 @@
   <section class="card">
     <div class="head-row">
       <h2 class="h small">圖說</h2>
-      <label class="btn primary sm file-btn">＋ 匯入圖說（PDF／圖片）<input type="file" id="dwgFile" accept="application/pdf,image/*" multiple></label>
+      <label class="btn primary sm file-btn">＋ 匯入圖說（PDF／圖片）<input type="file" id="dwgFile" accept="application/pdf,image/*,.heic,.heif" multiple></label>
     </div>
     <p class="muted" id="dwgLinkHint" hidden></p>
     <p class="muted" id="dwgMsg" role="status"></p>
@@ -646,9 +646,9 @@
   </div>
 </div>
 
-<script src="data.js?v=73"></script>
-<script src="mat-parse.js?v=73"></script>
-<script src="cloud.js?v=73"></script>
-<script src="app.js?v=73"></script>
+<script src="data.js?v=74"></script>
+<script src="mat-parse.js?v=74"></script>
+<script src="cloud.js?v=74"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>
