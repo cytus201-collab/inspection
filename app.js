@@ -120,7 +120,7 @@
   function recById(p, wid, rid) { return recs(p, wid).filter(function (r) { return r.id === rid; })[0]; }
   /* 文件分類編碼（監造計畫表8-1）：G 施工抽查、F 材料抽驗、L 施工照片、H 缺失追蹤；每個工程各自依日期（同日依建立順序）流水編號 */
   var codeCache = null;
-  function codeCat(w) { return !w ? '' : w.kind === 'matform' ? 'F' : w.kind === 'archrep' ? 'I' : w.kind === 'photo' ? '' : 'G'; }
+  function codeCat(w) { return !w ? '' : w.kind === 'matform' ? 'F' : w.kind === 'archrep' ? 'I' : w.kind === 'photo' || w.kind === 'fixphoto' ? '' : 'G'; }
   function codeKey(r) { return (r.checkDate || '9999') + '|' + ('000000000000000' + (r.created || 0)).slice(-15) + '|' + r.id; }
   function codes(p) {
     if (codeCache && codeCache.p === p) return codeCache.m;
@@ -131,7 +131,7 @@
         if (r.draft) return;
         var c = codeCat(w); if (c) L[c].push(r);
         if ((r.photos || []).length) L.L.push(r);
-        if (w.kind !== 'photo' && w.kind !== 'archrep') { var st = recState(w, r); if (st === 'ng' || st === 'fixed') L.H.push(r); }
+        if (w.kind !== 'photo' && w.kind !== 'archrep' && w.kind !== 'fixphoto') { var st = recState(w, r); if (st === 'ng' || st === 'fixed') L.H.push(r); }
       });
     });
     var m = { G: {}, F: {}, I: {}, L: {}, H: {} };
@@ -139,13 +139,14 @@
     codeCache = { p: p, m: m }; return m;
   }
   function recCode(p, w, r) { var c = codeCat(w), m = codes(p); return c ? m[c][r.id] || '' : m.L[r.id] || ''; }
-  function dispNo(p, w, r) { return recCode(p, w, r) || (r.draft ? '確認後編號' : ''); }
+  function dispNo(p, w, r) { return recCode(p, w, r) || (w && w.kind === 'fixphoto' ? (r.location || '缺失改善') : r.draft ? '確認後編號' : ''); }
   function matById(p, mid) { return p.mats.filter(function (m) { return m.id === mid; })[0]; }
   function cell(r, key) { return r.res[key] || (r.res[key] = { r: '', note: '' }); }
   function k(g, i) { return g + '-' + i; }
   function flowName(i) { return i === 0 ? '施工前' : PH_SHORT[i] + '檢查'; }
   function stats(w, r) {
     if (w.kind === 'photo') { var n = (r.photos || []).length; return { t: n, d: n, ng: 0 }; }
+    if (w.kind === 'fixphoto') { var fp = (r.fp || []).filter(function (x) { return x && (x.id || x.note); }).length; return { t: 3, d: fp, ng: 0 }; }
     var t = 0, d = 0, ng = 0;
     if (w.kind === 'irregular') {
       (r.rows || []).forEach(function (x) { t++; if (x.r) d++; if (x.r === 'ng') ng++; });
@@ -157,7 +158,7 @@
   /* 實際使用的抽查項目：預設項目（可改標準、可移除）＋自行新增的項目 */
   /* 抽查項目以固定代碼對應：r.res[項目代碼]、r.extra[分組代碼]。已確認的表使用存檔當下的標準快照（r.snap），法規更新不影響舊表 */
   function refText(code) { return code ? D.refs[code] || code : ''; }
-  function hasStd(w) { return !!(w && w.phases && w.phases.length && w.kind !== 'irregular' && w.kind !== 'photo'); }
+  function hasStd(w) { return !!(w && w.phases && w.phases.length && w.kind !== 'irregular' && w.kind !== 'photo' && w.kind !== 'fixphoto'); }
   function baseGroups(w, r) { return r.snap && !r.draft ? r.snap.groups : w.phases[r.phase].groups; }
   function snapOf(w, r) {
     return { ver: D.version, groups: w.phases[r.phase].groups.map(function (g) {
@@ -717,7 +718,7 @@
     if (batchWid !== w.id) batchSel = null;
     topbar(w.name, p.info.name || '未命名工程', p.info.name || '工程');
     var blocks = w.kind === 'phased' ? w.phases.map(function (ph, pi) { return { pi: pi, title: '(' + (pi + 1) + ') ' + flowName(pi), n: countItems(ph) + ' 項' }; })
-      : [{ pi: 0, title: w.kind === 'photo' || w.kind === 'archrep' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'safety' || w.kind === 'archrep' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
+      : [{ pi: 0, title: w.kind === 'fixphoto' ? '改善紀錄' : w.kind === 'photo' || w.kind === 'archrep' ? '督導紀錄' : '抽查紀錄', n: w.kind === 'fixphoto' ? '照片' : w.kind === 'safety' || w.kind === 'archrep' ? countItems(w.phases[0]) + ' 項' : w.kind === 'photo' ? '照片' : '項目自選' }];
     $('phaseBlocks').innerHTML = blocks.map(function (b) {
       var items = list.filter(function (r) { return r.phase === b.pi; }).sort(function (a, c) { return c.seq - a.seq; });
       var rows = items.map(function (r) {
@@ -737,7 +738,7 @@
     $('batchBar').innerHTML = batchSel ? '<span class="bb-n">已選 ' + ns + ' 張</span><button type="button" class="link" data-bb="all">全選</button><button type="button" class="link" data-bb="cancel">取消</button>' +
       '<button type="button" class="btn primary sm" data-bb="go"' + (ns ? '' : ' disabled') + '>預覽輸出</button>'
       : '<button type="button" class="link" data-bb="start">☑ 批次輸出 PDF</button>';
-    $('workRefs').textContent = w.kind === 'archrep' ? '每次督導新增一筆，填寫「建築物監造（監督、查核）報告表」（監造計畫表2-7，內政部格式），可附現場照片；各欄選填，可印空白表手填。' : w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
+    $('workRefs').textContent = w.kind === 'fixphoto' ? '每個缺失新增一筆：上傳改善前、改善中、改善後照片並填寫說明，輸出一頁 A4「缺失改善照片表」（獨立表單，不編號、不列入抽查總表）。' : w.kind === 'archrep' ? '每次督導新增一筆，填寫「建築物監造（監督、查核）報告表」（監造計畫表2-7，內政部格式），可附現場照片；各欄選填，可印空白表手填。' : w.kind === 'photo' ? '每次督導新增一筆，加入現場照片並填寫說明後輸出 A4 照片頁（每頁 6 張）。' : w.kind === 'irregular' ? '不定期抽查依承商自主檢查紀錄表隨機抽樣，抽驗項目可從 11 個工項的抽查標準帶入。'
       : '抽查標準依據：' + w.sources.map(function (s) { return D.refs[s]; }).join('；') + '。數值請依本案契約圖說確認。';
     show('vWork');
   }
@@ -778,22 +779,25 @@
     var prevR = r.draft && hasStd(w) && w.kind !== 'matform' ? recs(p, w.id).filter(function (x) { return x !== r && !x.draft && x.phase === r.phase; }).sort(function (a, b) { return (b.created || 0) - (a.created || 0); })[0] : null;
     if (prevR) $('autoLine').innerHTML += '<div class="copy-prev"><button type="button" class="link" id="btnCopyPrev" data-rid="' + prevR.id + '">↺ 帶入上一張（' + esc(dispNo(p, w, prevR)) + '）的判定與實測值</button></div>';
     if (r.draft) $('autoLine').innerHTML += '<div class="draft-note">尚未存檔：按下方「確認並產生 A4 表單」後才會列入抽查紀錄；直接返回則不保留。</div>';
-    var photoOnly = w.kind === 'photo';
+    var photoOnly = w.kind === 'photo', fixp = w.kind === 'fixphoto';
+    $('phGrid').closest('section').hidden = fixp;
     var canMove = w.kind !== 'matform';
     $('btnMove').hidden = !canMove; $('btnMoveTop').hidden = !canMove;
     $('tplRow').hidden = w.kind === 'irregular' || photoOnly; $('tplMsg').textContent = '';
     $('signCard').hidden = photoOnly;
     ['location', 'checkDate', 'fixDate', 'fixPerson'].forEach(function (id) { $(id).value = r[id] || ''; });
-    $('docNo').value = dispNo(p, w, r);
+    $('docNo').value = w.kind === 'fixphoto' ? '（本表不編號）' : dispNo(p, w, r);
     $('fixPerson').placeholder = I.inspector || '';
     document.querySelectorAll('input[name="fix"]').forEach(function (x) { x.checked = x.value === r.fix; });
     $('sigInspectorLbl').textContent = (single ? '監造現場人員' : '監造人員') + (I.inspector ? '（' + I.inspector + '）' : '');
     var arch = w.kind === 'archrep';
     $('phasedFix').hidden = single || photoOnly; $('singleResult').hidden = !single || photoOnly || arch;
-    if (arch) { $('signCard').hidden = true; $('tplRow').hidden = true; }
+    if (arch || fixp) { $('signCard').hidden = true; $('tplRow').hidden = true; }
+    if (fixp) { $('phasedFix').hidden = true; $('singleResult').hidden = true; }
     $('groups').classList.toggle('arch', arch);
     $('irrPicker').hidden = w.kind !== 'irregular';
-    if (photoOnly) { $('groups').innerHTML = ''; $('tbRight').textContent = (r.photos || []).length + ' 張'; }
+    if (fixp) { $('groups').innerHTML = fixForm(r); fixThumbs(); $('tbRight').textContent = stats(w, r).d + ' / 3'; }
+    else if (photoOnly) { $('groups').innerHTML = ''; $('tbRight').textContent = (r.photos || []).length + ' 張'; }
     else {
       if (single) fillSingle(r); else fixVis();
       if (w.kind === 'irregular') { fillPickWork(); renderRows(); } else renderGroups();
@@ -834,6 +838,47 @@
       '<label class="f wide">四、其他約定監造事項<textarea data-ar="other" rows="3">' + esc(a.other || '') + '</textarea></label></section>';
   }
   $('groups').addEventListener('input', function (e) { var k = e.target.dataset.ar; if (!k) return; var r = R(); (r.ar || (r.ar = {}))[k] = e.target.value; save(); });
+  /* 缺失改善照片表：三格（改善前／改善中／改善後），每格一張照片＋說明 */
+  var FP_SLOTS = [{ t: '改善前', h: '說明：(缺失情形)' }, { t: '改善中', h: '說明：(改善作法)' }, { t: '改善後', h: '說明：' }];
+  function fixForm(r) {
+    var fp = r.fp || [];
+    return FP_SLOTS.map(function (sl, i) {
+      var x = fp[i] || {};
+      return '<section class="card fp-slot" data-fi="' + i + '"><h2 class="h small">' + (i + 1) + '. ' + sl.t + '照片</h2>' +
+        '<div class="fp-row"><div class="fp-thumb">' + (x.id ? '<img alt="' + sl.t + '照片" data-img="' + x.id + '">' : '<span>尚無照片</span>') + '</div>' +
+        '<div class="fp-acts"><label class="btn">拍照<input type="file" accept="image/*,.heic,.heif" capture="environment" data-fpf="' + i + '" hidden></label>' +
+        '<label class="btn ghost">從相簿選<input type="file" accept="image/*,.heic,.heif" data-fpf="' + i + '" hidden></label>' +
+        (x.id ? '<button type="button" class="link" data-fpdel="' + i + '">移除照片</button>' : '') + '</div></div>' +
+        '<label class="f wide">' + esc(sl.h) + '<textarea rows="3" data-fpn="' + i + '">' + esc(x.note || '') + '</textarea></label><p class="fp-msg" data-fpm="' + i + '"></p></section>';
+    }).join('');
+  }
+  function fixThumbs() { fillImgs($('groups')); }
+  $('groups').addEventListener('change', function (e) {
+    var i = e.target.dataset.fpf; if (i == null) return;
+    var r = R(), files = e.target.files, msg = document.querySelector('[data-fpm="' + i + '"]'); if (!files || !files.length) return;
+    heicFix([files[0]], msg).then(function (o) {
+      if (!o.files.length) { msg.textContent = heicBadMsg(o.bad); return; }
+      msg.textContent = '處理中…';
+      return compress(o.files[0]).then(function (data) {
+        var id = 'ph_' + uid(); thumbCache[id] = data;
+        return IDB.put(id, data).then(function () {
+          if (!r.fp) r.fp = []; r.fp[i] = Object.assign({}, r.fp[i] || {}, { id: id });
+          if (window.Cloud) window.Cloud.uploadPhoto(id, data); save(); renderForm();
+        });
+      });
+    }).catch(function (err) { msg.textContent = (err && err.message) || '照片加入失敗'; });
+    e.target.value = '';
+  });
+  $('groups').addEventListener('input', function (e) { var i = e.target.dataset.fpn; if (i == null) return; var r = R(); if (!r.fp) r.fp = []; r.fp[i] = Object.assign({}, r.fp[i] || {}, { note: e.target.value }); save(); });
+  $('groups').addEventListener('click', function (e) { var b = e.target.closest('[data-fpdel]'); if (!b) return; var r = R(); if (r.fp && r.fp[b.dataset.fpdel]) { delete r.fp[b.dataset.fpdel].id; save(); renderForm(); } });
+  function paperFixPhoto(p, w, r) {
+    var fp = r.fp || [], bl = PARTS.blank, I = p.info;
+    var rows = FP_SLOTS.map(function (sl, i) {
+      var x = fp[i] || {}, h = sl.h.split('：');
+      return '<tr><td class="fp-img">' + (x.id ? '<img alt="" data-img="' + x.id + '">' : '') + '</td><td class="fp-note"><div class="fp-h">' + h[0] + '：' + (h[1] ? '<br>' + h[1] : '') + '</div>' + (bl || !x.note ? '' : '<div class="fp-t">' + esc(x.note).replace(/\n/g, '<br>') + '</div>') + '</td></tr>';
+    }).join('');
+    return '<div class="pf pf-fixp"><table>' + rows + '</table><div class="fp-name">' + vtxt('工程名稱：' + (I.name || '')) + '</div></div>';
+  }
   /* 固定清單（分階段工項、勞安衛生） */
   function renderGroups() {
     var w = W(), r = R();
@@ -1190,6 +1235,7 @@
   }
   $('btnConfirm').addEventListener('click', function () {
     var w = W(), r = R(), miss = [];
+    if (w.kind === 'fixphoto') { delete r.draft; save(); go({ v: 'preview', pid: cur.pid, wid: cur.wid, rid: cur.rid }); return; }
     if (w.kind === 'photo') {
       if (!(r.photos || []).length) { $('phMsg').textContent = '請先加入照片。'; $('phMsg').scrollIntoView({ block: 'center' }); return; }
       delete r.draft; save();
@@ -1236,7 +1282,8 @@
   function recPaper(p, w, r, first) {
     bindOut(r, 'outAt', function () { return r.checkDate ? r.checkDate + nowLocal().slice(10) : nowLocal(); });
     var out = '';
-    if (w.kind === 'photo') { if (PARTS.photo || PARTS.form) out += photoPages(w, r).replace(/<\/section>$/, foot() + '</section>'); }
+    if (w.kind === 'fixphoto') { if (PARTS.photo || PARTS.form) out += (first ? '' : '<section class="rec-sec">') + paperFixPhoto(p, w, r) + (first ? '' : '</section>'); }
+    else if (w.kind === 'photo') { if (PARTS.photo || PARTS.form) out += photoPages(w, r).replace(/<\/section>$/, foot() + '</section>'); }
     else {
       if (PARTS.form) out += (first ? '' : '<section class="rec-sec">') + (w.kind === 'phased' ? paperPhased(p, w, r) : w.kind === 'matform' ? paperMat(p, w, r) : w.kind === 'archrep' ? paperArch(p, w, r) : paperSingle(p, w, r)) + (first ? '' : '</section>');
       if (PARTS.photo) out += photoPages(w, r);
@@ -1251,7 +1298,7 @@
     topbar('列印預覽', multi ? w.name + ' · 共 ' + batch.length + ' 張' : recTitle(w, r) + ' ' + dispNo(p, w, r), multi ? w.name : '返回修改');
     $('btnMovePv').hidden = w.kind === 'matform' || multi;
     $('pvParts').hidden = false;
-    document.querySelectorAll('[data-part]').forEach(function (x) { x.checked = !!PARTS[x.dataset.part]; x.closest('label').hidden = w.kind === 'photo' && x.dataset.part !== 'photo'; });
+    document.querySelectorAll('[data-part]').forEach(function (x) { x.checked = !!PARTS[x.dataset.part]; x.closest('label').hidden = (w.kind === 'photo' && x.dataset.part !== 'photo') || (w.kind === 'fixphoto' && x.dataset.part !== 'blank'); });
     $('pvBlankNote').hidden = !PARTS.blank;
     var paper = $('paper'); paper.className = 'paper';
     var html = batch.map(function (x, i) { return recPaper(p, w, x, i === 0); }).join('').replace(/^<section class="rec-sec">/, '<section>');
@@ -1263,7 +1310,7 @@
     $('printHint').textContent = '紙張選 A4 直式、邊界「預設」。「另存 PDF」會直接下載檔案，不經過列印視窗。';
     show('vPreview');
     var only = PARTS.form ? '' : PARTS.photo && !PARTS.dwg ? '_照片' : PARTS.dwg && !PARTS.photo ? '_位置圖' : '_照片及位置圖';
-    if (w.kind === 'photo') only = '';
+    if (w.kind === 'photo' || w.kind === 'fixphoto') only = '';
     if (multi) {
       var ds = batch.map(function (x) { return x.checkDate; }).filter(Boolean).sort(), d1 = rocNum(ds[0] || today()), d2 = rocNum(ds[ds.length - 1] || today());
       var cs = batch.map(function (x) { return recCode(p, w, x); }).filter(Boolean).sort(), c1 = cs[0] || '', c2 = cs[cs.length - 1] || '';
@@ -1274,6 +1321,7 @@
   function rocNum(d) { var a = (d || '').split('-'); return a.length === 3 ? (a[0] - 1911) + a[1] + a[2] : ''; }
   function recFileName(p, w, r) {
     var dt = rocNum(r.checkDate || today()), mm = w.kind === 'matform' && matById(p, r.mid), no = recCode(p, w, r);
+    if (w.kind === 'fixphoto') return dt + '_缺失改善照片表' + (r.location ? '_' + r.location : '');
     return (no ? no + '_' : '') + dt + '_' + (w.kind === 'phased' ? w.name + PH_SHORT[r.phase] + '抽查' : w.kind === 'matform' ? '材料進場抽查_' + (mm ? mm.name : '') : w.kind === 'archrep' ? '建築物監造報告表' : w.name);
   }
   $('btnPrint').addEventListener('click', function () { window.print(); });
@@ -2574,7 +2622,7 @@
       return xs.length ? '（' + xs.join('、') + '）' : '';
     };
     Object.keys(p.recs || {}).forEach(function (wid) {
-      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep') return;
+      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep' || w.kind === 'fixphoto') return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft) return;
         var loc = r.location ? '（' + r.location + '）' : '';
@@ -3001,7 +3049,7 @@
   function sumData(p, to) {
     var cons = [], mats = [], defs = [], usedMat = {};
     Object.keys(p.recs || {}).forEach(function (wid) {
-      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep') return;
+      var w = WORK[wid]; if (!w || w.kind === 'photo' || w.kind === 'archrep' || w.kind === 'fixphoto') return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft || !r.checkDate || r.checkDate > to) return;
         var m = w.kind === 'matform' && matById(p, r.mid), st = recState(w, r), single = !isFix(w);
@@ -3206,18 +3254,18 @@
     if (!g.from || !g.to) return out;
     Object.keys(p.recs || {}).forEach(function (wid) {
       var w = WORK[wid]; if (!w) return;
-      var mat = w.kind === 'matform';
-      if (mat ? !$('zipMat').checked : !$('zipWork').checked) return;
+      var mat = w.kind === 'matform', fx = w.kind === 'fixphoto';
+      if (fx ? !$('zipFix').checked : mat ? !$('zipMat').checked : !$('zipWork').checked) return;
       (p.recs[wid] || []).forEach(function (r) {
         if (r.draft || !r.checkDate || r.checkDate < g.from || r.checkDate > g.to) return;
-        out.push({ w: w, r: r, mat: mat });
+        out.push({ w: w, r: r, mat: mat, fx: fx });
       });
     });
     return out.sort(function (a, b) { return a.r.checkDate.localeCompare(b.r.checkDate) || (a.w.name || '').localeCompare(b.w.name || '') || (a.r.phase || 0) - (b.r.phase || 0) || (a.r.seq || 0) - (b.r.seq || 0); });
   }
   function zipCount() {
-    var p = proj(cur.pid), g = zipRange(), okDate = g.from && g.to && g.from <= g.to, L = okDate ? zipList(p) : [], m = L.filter(function (x) { return x.mat; }).length;
-    $('zipCount').textContent = !okDate ? '請選擇開始與結束日期（開始不可晚於結束）。' : '範圍內共 ' + L.length + ' 張：施工 ' + (L.length - m) + '、材料 ' + m + '（草稿不含）';
+    var p = proj(cur.pid), g = zipRange(), okDate = g.from && g.to && g.from <= g.to, L = okDate ? zipList(p) : [], m = L.filter(function (x) { return x.mat; }).length, fxn = L.filter(function (x) { return x.fx; }).length;
+    $('zipCount').textContent = !okDate ? '請選擇開始與結束日期（開始不可晚於結束）。' : '範圍內共 ' + L.length + ' 張：施工 ' + (L.length - m - fxn) + '、材料 ' + m + (fxn ? '、缺失改善 ' + fxn : '') + '（草稿不含）';
     return L;
   }
   function ymRange(off) {
@@ -3268,7 +3316,7 @@
           if (!html.replace(/<[^>]+>/g, '').trim() && html.indexOf('<img') < 0) { skipped++; return; }
           src.className = 'paper'; src.innerHTML = html; fitForms(src); fitPlan(src);
           return imgsReady(src).then(function () { return makePdf(src); }).then(function (blob) {
-            var dir = it.mat ? '材料抽查/' : it.w.kind === 'archrep' ? '監造報告/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
+            var dir = it.mat ? '材料抽查/' : it.fx ? '缺失改善照片/' : it.w.kind === 'archrep' ? '監造報告/' : '施工抽查/', base = (recFileName(p, it.w, it.r) + only).replace(/[\\/:*?"<>|]+/g, '_').trim(), name = base, n = 2;
             while (used[dir + name]) name = base + '_' + n++;
             used[dir + name] = 1; zip.file(dir + name + '.pdf', blob); done++;
           });
@@ -3784,7 +3832,7 @@
     var single = !isFix(w), s = stats(w, r);
     var ng = single ? (r.result === 'ng' || s.ng > 0) : s.ng > 0;
     if (ng) return (single ? r.re === 'ok' : r.fix === 'done') ? 'fixed' : 'ng';
-    return s.d || r.result || w.kind === 'photo' ? 'ok' : 'todo';
+    return s.d || r.result || w.kind === 'photo' || w.kind === 'fixphoto' ? 'ok' : 'todo';
   }
   function markState(p, m) { var li = linkInfo(p, m.rid); return li ? recState(li.w, li.r) : 'none'; }
   function colorOf(m) { var p = proj(cur.pid), st = m.rid ? markState(p, m) : 'none'; return st === 'none' ? DW_COLORS[m.c || 0] : ST_COLOR[st]; }
